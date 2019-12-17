@@ -15,7 +15,6 @@
     "require": {
         "php": ">=7.2.0",
         "ext-curl": "*",
-        "fig/http-message-util": "^1.1",
         "psr/http-client": "^1.0",
         "psr/http-factory": "^1.0"
     },
@@ -24,7 +23,7 @@
         "squizlabs/php_codesniffer": "3.*"
     },
     "archive": {
-        "exclude": ["build/", "bin/", "composer.lock"]
+        "exclude": ["build/", "composer.lock"]
     },
     "autoload": {
         "psr-4": {
