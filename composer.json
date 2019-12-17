@@ -6,7 +6,7 @@
     "type": "library",
     "authors": [
         {
-            "name":"Alex Barker",
+            "name": "Alex Barker",
             "email": "alex@1stleg.com",
             "homepage":"http://github.com/kwhat",
             "role": "Owner"
@@ -37,7 +37,6 @@
     },
     "config": {
         "optimize-autoloader": true,
-        "secure-http": false,
         "sort-packages": true
     },
     "scripts": {
