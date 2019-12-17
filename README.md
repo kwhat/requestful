@@ -1,0 +1,1 @@
+# Requestful: A simple PSR compatible HTTP client library
