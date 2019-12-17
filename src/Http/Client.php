@@ -217,7 +217,7 @@ class Client implements AsyncClientInterface
             curl_setopt($this->handles[$id], CURLOPT_PROGRESSFUNCTION, null);
             curl_reset($this->handles[$id]);
 
-            if (count($this->cache) < $this->getConfig("cache_size")) {
+            if (count($this->cache) <= $this->getConfig("cache_size")) {
                 $this->cache[] = $this->handles[$id];
             } else {
                 curl_close($this->handles[$id]);
