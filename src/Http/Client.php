@@ -4,7 +4,6 @@ namespace Requestful\Http;
 
 use Exception;
 use Psr\Http\Client\ClientExceptionInterface;
-use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -14,7 +13,7 @@ use Requestful\Futures\PromiseInterface;
 use Requestful\Exceptions\HttpClientException;
 use Throwable;
 
-class Client implements ClientInterface
+class Client implements AsyncClientInterface
 {
     /** @var array $config */
     private $config;
@@ -245,6 +244,15 @@ class Client implements ClientInterface
         }
 
         return $config;
+    }
+
+    public function setConfig($option, $value = null)
+    {
+        if (is_array($option)) {
+            $this->config = $option + $this->getConfigDefaults();
+        } elseif (!is_object($option)) {
+            $this->config[$option] = $value;
+        }
     }
 
     /**
