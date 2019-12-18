@@ -95,8 +95,6 @@ class Client implements AsyncClientInterface
             $resource = curl_init();
         }
 
-        $id = (int)$resource;
-
         if (!empty($request->getUploadedFiles())) {
             $fields = $request->getAttributes();
             foreach ($request->getUploadedFiles() as $name => $file) {
@@ -135,6 +133,7 @@ class Client implements AsyncClientInterface
             CURLOPT_WRITEFUNCTION => [$this, "writeBody"]
         ));
 
+        $id = (int)$resource;
         curl_multi_add_handle($this->mh, $resource);
         $this->handles[$id] = $resource;
 
@@ -207,7 +206,6 @@ class Client implements AsyncClientInterface
                     $this->responses[$id]->getBody()->rewind();
                     $this->promises[$id]->resolve($this->responses[$id]);
                 } else {
-                    var_dump($info);
                     $this->promises[$id]->reject(new Exception(curl_error($info["handle"]), $info["result"]));
                 }
 
@@ -227,15 +225,8 @@ class Client implements AsyncClientInterface
         $success = false;
         if (isset($this->handles[$id])) {
             curl_multi_remove_handle($this->mh, $this->handles[$id]);
-
-            // Remove all callback functions as they can hold onto references
-            // and are not cleaned up by curl_reset. Using curl_setopt_array
-            // does not work for some reason, so removing each one
-            // individually.
             curl_setopt($this->handles[$id], CURLOPT_HEADERFUNCTION, null);
-            curl_setopt($this->handles[$id], CURLOPT_READFUNCTION, null);
             curl_setopt($this->handles[$id], CURLOPT_WRITEFUNCTION, null);
-            curl_setopt($this->handles[$id], CURLOPT_PROGRESSFUNCTION, null);
             curl_reset($this->handles[$id]);
 
             if (count($this->cache) <= $this->getConfig("cache_size")) {
