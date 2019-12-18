@@ -7,6 +7,7 @@ use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\UploadedFileInterface;
 use ReflectionException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
@@ -95,8 +96,25 @@ class Client implements AsyncClientInterface
         }
 
         $id = (int)$resource;
-        $body = $request->getBody();
-        $body->rewind();
+
+        if (!empty($request->getUploadedFiles())) {
+            $fields = $request->getAttributes();
+            foreach ($request->getUploadedFiles() as $name => $file) {
+                /** @var UploadedFileInterface $file */
+                $fields[$name] = curl_file_create(
+                    $file->getStream()->getMetadata("uri"),
+                    $file->getClientMediaType(),
+                    $file->getClientFilename()
+                );
+            }
+        } elseif (!empty($request->getAttributes())) {
+            $fields = $request->getAttributes();
+        } else {
+            $body = $request->getBody();
+            $body->rewind();
+            $fields = $body->getContents();
+        }
+
         $headers = $request->getHeaders();
         foreach ($headers as $key => $value) {
             $headers[$key] = implode(", ", $value);
@@ -105,9 +123,10 @@ class Client implements AsyncClientInterface
         curl_setopt_array($resource, array(
             CURLOPT_URL => $request->getUri(),
             CURLOPT_CUSTOMREQUEST => $request->getMethod(),
-            CURLOPT_POSTFIELDS => $body->getContents(),
+            CURLOPT_POSTFIELDS => $fields,
             CURLOPT_VERBOSE => false,
             CURLOPT_HEADER => false,
+            CURLOPT_SAFE_UPLOAD => true,
             CURLOPT_RETURNTRANSFER => false,
             CURLOPT_NOBODY => false,
             CURLOPT_FOLLOWLOCATION => $this->getConfig("follow_redirects"),
@@ -188,6 +207,7 @@ class Client implements AsyncClientInterface
                     $this->responses[$id]->getBody()->rewind();
                     $this->promises[$id]->resolve($this->responses[$id]);
                 } else {
+                    var_dump($info);
                     $this->promises[$id]->reject(new Exception(curl_error($info["handle"]), $info["result"]));
                 }
 
@@ -200,6 +220,7 @@ class Client implements AsyncClientInterface
             }
         }
     }
+
 
     protected function close($id)
     {

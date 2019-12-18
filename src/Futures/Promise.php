@@ -4,7 +4,6 @@ namespace Requestful\Futures;
 
 use ArrayAccess;
 use BadMethodCallException;
-use DomainException;
 use Exception;
 use Iterator;
 use LogicException;
