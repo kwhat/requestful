@@ -1,10 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Requestful\Http {
 
     use Requestful\Test\Http\ClientTest;
     use ReflectionException;
     use ReflectionObject;
+
+    function curl_setopt_array($handle, array $options)
+    {
+        return true;
+    }
 
     /**
      * @param resource $mh
@@ -48,6 +55,13 @@ namespace Requestful\Http {
 
 namespace Requestful\Test\Http {
 
+    use PHPUnit\Framework\MockObject\MockObject;
+    use Psr\Http\Client\ClientExceptionInterface;
+    use Psr\Http\Message\RequestInterface;
+    use Psr\Http\Message\ResponseFactoryInterface;
+    use Psr\Http\Message\ResponseInterface;
+    use Psr\Http\Message\StreamInterface;
+    use Requestful\Exceptions\PromiseException;
     use Requestful\Futures\PromiseInterface;
     use Requestful\Http\Client;
     use Exception;
@@ -67,48 +81,111 @@ namespace Requestful\Test\Http {
         public static $handle = null;
 
         /**
-         * @throws MethodNotAllowedException
-         * @throws ReflectionException
-         * @throws Exception
+         * @throws ClientExceptionInterface
          */
-        public function testSendSuccess()
+        public function testSendRequestSuccess()
         {
-            $request = new Request(
-                "GET",
-                Uri::createFromString("/"),
-                new Headers(),
-                array(),
-                array("SERVER_PROTOCOL" => "1.1"),
-                new RequestBody()
-            );
+            /** @var MockObject|StreamInterface $body */
+            $body = $this->createMock(StreamInterface::class);
 
-            static::$client = new Client();
-            $promise = static::$client->send($request);
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
+
+            /** @var MockObject|ResponseFactoryInterface $factory */
+            $factory = $this->createMock(ResponseFactoryInterface::class);
+
+            $body
+                ->expects($this->once())
+                ->method("rewind")
+                ->with();
+
+            $body
+                ->expects($this->once())
+                ->method("getContents")
+                ->with()
+                ->willReturn("");
+
+            $request
+                ->expects($this->once())
+                ->method("getBody")
+                ->with()
+                ->willReturn($body);
+
+            $request
+                ->expects($this->once())
+                ->method("getHeaders")
+                ->with()
+                ->willReturn($body);
+
+            static::$client = new Client($factory);
+            $this->assertNotInstanceOf(PromiseInterface::class, static::$client->sendRequest($request));
+        }
+
+        public function testSendRequestAsyncSuccess()
+        {
+            /** @var MockObject|StreamInterface $body */
+            $body = $this->createMock(StreamInterface::class);
+
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
+
+            /** @var MockObject|ResponseFactoryInterface $factory */
+            $factory = $this->createMock(ResponseFactoryInterface::class);
+
+            $body
+                ->expects($this->once())
+                ->method("rewind")
+                ->with();
+
+            $body
+                ->expects($this->once())
+                ->method("getContents")
+                ->with()
+                ->willReturn("");
+
+            $request
+                ->expects($this->once())
+                ->method("getBody")
+                ->with()
+                ->willReturn($body);
+
+            $request
+                ->expects($this->once())
+                ->method("getHeaders")
+                ->with()
+                ->willReturn($body);
+
+            static::$client = new Client($factory);
+            $promise = static::$client->sendRequestAsync($request);
             $this->assertInstanceOf(PromiseInterface::class, $promise);
-
-            $ref = new ReflectionObject(static::$client);
-            $property = $ref->getProperty("promises");
-            $property->setAccessible(true);
-            $promises = $property->getValue(static::$client);
-
-            $key = array_search($promise, $promises, true);
-            $this->assertNotFalse($key);
-
-            $property = $ref->getProperty("handles");
-            $property->setAccessible(true);
-            $handles = $property->getValue(static::$client);
-
-            static::$handle = $handles[$key];
 
             $promise->wait();
         }
 
-        public function testGetConfigSuccess()
+        public function testGetConfig()
         {
-            $client = new Client();
+            $factory = $this->createMock(ResponseFactoryInterface::class);
+
+            $client = new Client($factory);
+
             $this->assertIsArray($client->getConfig());
             $this->assertIsInt($client->getConfig("cache_size"));
             $this->assertNull($client->getConfig("invalid"));
+        }
+
+        public function testSetConfig()
+        {
+            $factory = $this->createMock(ResponseFactoryInterface::class);
+
+            $client = new Client($factory);
+
+            $size = $client->getConfig("cache_size");
+
+            $client->setConfig("cache_size", (int)$size / 2);
+            $this->assertEquals((int)$size / 2, $client->getConfig("cache_size"));
+
+            $client->setConfig(["cache_size" => (int)$size / 3]);
+            $this->assertEquals((int)$size / 3, $client->getConfig("cache_size"));
         }
     }
 }

@@ -1,26 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Requestful\Test\Futures;
 
-use Requestful\Exceptions\CancellationException;
+use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
-use Exception;
-use LogicException;
 use PHPUnit\Framework\TestCase;
 
 class PromiseTest extends TestCase
 {
     /**
-     * @throws Exception
+     * @throws PromiseException
      */
+    /*
     public function testWait()
     {
         $value = "Test Value";
 
         $promise = new Promise(
             function () use (&$promise, $value) {
-                /** @var Promise $promise */
+                /** @var Promise $promise *
                 $promise->resolve($value);
             }
         );
@@ -29,38 +30,39 @@ class PromiseTest extends TestCase
         $this->assertSame($value, $promise->wait());
         $this->assertEquals(PromiseInterface::FULFILLED, $promise->getState());
     }
+    */
 
-    /**
-     * @throws Exception
-     */
-    public function testWaitWithUnwind()
+    public function testUnwrap()
     {
         $value = "Test Value";
-        $promise = new Promise(
-            function () use (&$promise, $value) {
-                $nested = new Promise(
-                    function () use (&$nested, $value) {
-                        /** @var Promise $nested */
-                        $nested->resolve($value);
-                    }
-                );
 
-                /** @var Promise $promise */
-                $promise->resolve($nested);
+        /** @var PromiseInterface $base */
+        $base = new Promise(
+            function () use (&$base, $value) {
+                $base->resolve($value);
             }
         );
 
+        $promise = $base
+            ->then(function ($response) {
+                return strtoupper($response);
+            })
+            ->then(function ($response) {
+                return strtolower($response);
+            });
+
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
-        $this->assertSame($value, $promise->wait());
+        $this->assertSame(strtolower($value), $promise->wait());
         $this->assertEquals(PromiseInterface::FULFILLED, $promise->getState());
     }
 
     /**
-     * @throws Exception
+     * @throws PromiseException
      */
+    /*
     public function testWaitWithException()
     {
-        $value = new Exception("Test Value");
+        $value = new PromiseException("Test Value");
         $promise = new Promise(
             function () use (&$promise, $value) {
                 throw $value;
@@ -72,18 +74,18 @@ class PromiseTest extends TestCase
         $this->assertSame($promise->wait(), $value);
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
+    */
 
     /**
-     * @throws Exception
-     */
+     * @throws PromiseException
     public function testWaitWithResolvedException()
     {
-        $this->expectException(Exception::class);
+        $this->expectException(PromiseException::class);
 
-        $value = new Exception("Test Value");
+        $value = new PromiseException("Test Value");
         $promise = new Promise(
             function () use (&$promise, $value) {
-                /** @var Promise $promise */
+                /** @var Promise $promise *
                 $promise->resolve($value->getMessage());
                 throw $value;
             },
@@ -94,21 +96,23 @@ class PromiseTest extends TestCase
         $this->assertSame($promise->wait(), $value);
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
+     */
 
     /**
-     * @throws Exception
-     */
+     * @throws PromiseException
+
     public function testWaitWithoutCallback()
     {
-        $this->expectException(LogicException::class);
+        $this->expectException(PromiseException::class);
 
         $promise = new Promise(null, null);
         $promise->wait();
     }
+     */
 
     /**
-     * @throws Exception
-     */
+     * @throws PromiseException
+
     public function testCancel()
     {
         $isCanceled = false;
@@ -122,17 +126,17 @@ class PromiseTest extends TestCase
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
         $promise->cancel();
 
-        $this->assertInstanceOf(CancellationException::class, $promise->wait());
+        $this->assertInstanceOf(PromiseException::class, $promise->wait());
         $this->assertTrue($isCanceled);
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
-
-    /**
-     * @throws Exception
      */
+    /**
+     * @throws PromiseException
+
     public function testCancelWithException()
     {
-        $value = new Exception("Test Value");
+        $value = new PromiseException("Test Value");
         $promise = new Promise(
             null,
             function () use (&$promise, $value) {
@@ -145,16 +149,15 @@ class PromiseTest extends TestCase
         $this->assertEquals($value, $promise->wait());
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
+*/
 
-    /**
-     * @throws Exception
-     */
+    /*
     public function testThenCallback()
     {
         $value = "Test Value";
         $tmp = new Promise(
             function () use (&$tmp, $value) {
-                /** @var Promise $tmp */
+                /** @var Promise $tmp *
                 $tmp->resolve($value);
             },
             null
@@ -173,15 +176,12 @@ class PromiseTest extends TestCase
         $this->assertEquals(PromiseInterface::FULFILLED, $promise->getState());
     }
 
-    /**
-     * @throws Exception
-     */
     public function testThenCallbackWithException()
     {
         $value = "Test Value";
         $tmp = new Promise(
             function () use (&$tmp, $value) {
-                /** @var Promise $tmp */
+                /** @var Promise $tmp *
                 $tmp->resolve($value);
             },
             null
@@ -190,24 +190,21 @@ class PromiseTest extends TestCase
         // Create a new promise from the existing promise with a success callback handler.
         $promise = $tmp->then(
             function ($value) {
-                throw new Exception($value);
+                throw new PromiseException($value);
             }
         );
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
-        $this->assertInstanceOf(Exception::class, $promise->wait());
+        $this->assertInstanceOf(PromiseException::class, $promise->wait());
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
-    /**
-     * @throws Exception
-     */
     public function testThenCallbackWithCancel()
     {
         $value = "Test Value";
         $tmp = new Promise(
             function () use (&$tmp, $value) {
-                /** @var Promise $tmp */
+                /** @var Promise $tmp *
                 $tmp->resolve($value);
             },
             null
@@ -222,18 +219,15 @@ class PromiseTest extends TestCase
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
         $promise->cancel();
-        $this->assertInstanceOf(CancellationException::class, $promise->wait());
+        $this->assertInstanceOf(PromiseException::class, $promise->wait());
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
-    /**
-     * @throws Exception
-     */
     public function testOtherwiseCallback()
     {
         $tmp = new Promise(
             function () use (&$tmp) {
-                /** @var Promise $tmp */
+                /** @var Promise $tmp *
                 $tmp->reject("Test Value");
             },
             null
@@ -252,17 +246,15 @@ class PromiseTest extends TestCase
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
-    /**
-     * @throws Exception
-     */
+
     public function testResolveAgainFailure()
     {
-        $this->expectException(LogicException::class);
+        $this->expectException(PromiseException::class);
 
         $value = "Test Value";
         $promise = new Promise(
             function () use (&$promise, $value) {
-                /** @var Promise $promise */
+                /** @var Promise $promise *
                 $promise->resolve($value);
             },
             null
@@ -272,17 +264,14 @@ class PromiseTest extends TestCase
         $promise->resolve("New {$value}");
     }
 
-    /**
-     * @throws Exception
-     */
     public function testRejectAgainFailure()
     {
-        $this->expectException(LogicException::class);
+        $this->expectException(PromiseException::class);
 
         $value = "Test Value";
         $promise = new Promise(
             function () use (&$promise, $value) {
-                /** @var Promise $promise */
+                /** @var Promise $promise *
                 $promise->resolve($value);
             },
             null
@@ -291,4 +280,5 @@ class PromiseTest extends TestCase
         $promise->wait();
         $promise->reject($value);
     }
+    */
 }

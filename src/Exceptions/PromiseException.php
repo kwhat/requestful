@@ -4,6 +4,6 @@ namespace Requestful\Exceptions;
 
 use Exception;
 
-class CancellationException extends Exception
+class PromiseException extends Exception
 {
 }

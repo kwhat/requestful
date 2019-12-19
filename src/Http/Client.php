@@ -22,25 +22,19 @@ class Client implements AsyncClientInterface
     private $config;
 
     /** @var ResponseFactoryInterface $factory */
-    private $factory;
+    protected $factory;
 
     /** @var resource $mh */
-    private $mh;
+    protected $mh;
 
     /** @var resource[] $handles */
-    private $handles = [];
+    protected $handles = [];
 
     /** @var resource[] $cache */
-    private $cache = [];
+    protected $cache = [];
 
     /** @var PromiseInterface[] $promises */
-    private $promises = [];
-
-    /** @var RequestInterface[] $requests */
-    private $requests = [];
-
-    /** @var ResponseInterface[] $requests */
-    private $responses = [];
+    protected $promises = [];
 
     /**
      * @param ResponseFactoryInterface $factory
@@ -49,7 +43,7 @@ class Client implements AsyncClientInterface
     public function __construct(ResponseFactoryInterface $factory, array $config = [])
     {
         $this->factory = $factory;
-        $this->config = $config + $this->getConfigDefaults();
+        $this->config = array_merge_recursive($this->getDefaultConfig(), $config);
     }
 
     public function __destruct()
@@ -97,7 +91,7 @@ class Client implements AsyncClientInterface
             $resource = curl_init();
         }
 
-        if (!empty($request->getUploadedFiles())) {
+        if (method_exists($request, "getUploadedFiles") && !empty($request->getUploadedFiles())) {
             $fields = $request->getAttributes();
             foreach ($request->getUploadedFiles() as $name => $file) {
                 /** @var UploadedFileInterface $file */
@@ -107,7 +101,7 @@ class Client implements AsyncClientInterface
                     $file->getClientFilename()
                 );
             }
-        } elseif (!empty($request->getAttributes())) {
+        } elseif (method_exists($request, "getAttributes") && !empty($request->getAttributes())) {
             $fields = $request->getAttributes();
         } else {
             $body = $request->getBody();
@@ -129,22 +123,21 @@ class Client implements AsyncClientInterface
             CURLOPT_SAFE_UPLOAD => true,
             CURLOPT_RETURNTRANSFER => false,
             CURLOPT_NOBODY => false,
-            CURLOPT_FOLLOWLOCATION => $this->getConfig("follow_redirects"),
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_HEADERFUNCTION => [$this, "writeHeader"],
             CURLOPT_WRITEFUNCTION => [$this, "writeBody"]
-        ));
+        ) + $this->getConfig("curl_opts"));
 
         $id = (int)$resource;
         curl_multi_add_handle($this->mh, $resource);
-        $this->handles[$id] = $resource;
 
         $promise = new Promise(
-            function () use (&$promise) {
-                /** @var PromiseInterface $promise */
-                while ($promise->getState() == PromiseInterface::PENDING) {
+            function () use ($id) {
+                while ($this->promises[$id]->getState() == PromiseInterface::PENDING) {
                     $this->tick();
                 }
+
+                return $this->promises[$id]->wait();
             },
             function () use ($id) {
                 $this->close($id);
@@ -153,12 +146,12 @@ class Client implements AsyncClientInterface
 
         $response = $this->factory->createResponse();
 
+        $promise["HTTP_START_TIME"] = microtime(true);
         $promise["HTTP_REQUEST"] = $request;
         $promise["HTTP_RESPONSE"] = $response;
 
+        $this->handles[$id] = $resource;
         $this->promises[$id] = $promise;
-        $this->requests[$id] = $request;
-        $this->responses[$id] = $response;
 
         return $promise;
     }
@@ -172,11 +165,14 @@ class Client implements AsyncClientInterface
     {
         $id = (int)$resource;
 
+        /** @var ResponseInterface $response */
         if (($pos = strpos($header, ":")) !== false) {
-            $this->responses[$id] = $this->responses[$id]
+            $response = $this->promises[$id]["HTTP_RESPONSE"];
+            $this->promises[$id]["HTTP_RESPONSE"] = $response
                 ->withAddedHeader(substr($header, 0, $pos), substr($header, $pos + 1));
         } elseif (preg_match('/^HTTP\/([0-9.]+)\s+([0-9]{3})\s*(\S*)/i', $header, $matches)) {
-            $this->responses[$id] = $this->responses[$id]
+            $response = $this->promises[$id]["HTTP_RESPONSE"];
+            $this->promises[$id]["HTTP_RESPONSE"] = $response
                 ->withProtocolVersion($matches[1])
                 ->withStatus((int)$matches[2], $matches[3]);
         }
@@ -188,7 +184,10 @@ class Client implements AsyncClientInterface
     {
         $id = (int)$resource;
 
-        return $this->responses[$id]->getBody()->write($body);
+        /** @var ResponseInterface $response */
+        $response = $this->promises[$id]["HTTP_RESPONSE"];
+
+        return $response->getBody()->write($body);
     }
 
     /**
@@ -205,9 +204,13 @@ class Client implements AsyncClientInterface
 
                 $this->promises[$id]["HTTP_TOTAL_TIME"] = curl_getinfo($info["handle"], CURLINFO_TOTAL_TIME);
                 if ($info["result"] == CURLE_OK) {
-                    $this->responses[$id]->getBody()->rewind();
-                    $this->promises[$id]->resolve($this->responses[$id]);
+                    /** @var ResponseInterface $response */
+                    $response = $this->promises[$id]["HTTP_RESPONSE"];
+
+                    $response->getBody()->rewind();
+                    $this->promises[$id]->resolve($response);
                 } else {
+                    // TODO NetworkException
                     $this->promises[$id]->reject(new Exception(curl_error($info["handle"]), $info["result"]));
                 }
 
@@ -227,8 +230,10 @@ class Client implements AsyncClientInterface
         $success = false;
         if (isset($this->handles[$id])) {
             curl_multi_remove_handle($this->mh, $this->handles[$id]);
-            curl_setopt($this->handles[$id], CURLOPT_HEADERFUNCTION, null);
-            curl_setopt($this->handles[$id], CURLOPT_WRITEFUNCTION, null);
+            curl_setopt_array($this->handles[$id], array(
+                CURLOPT_HEADERFUNCTION => null,
+                CURLOPT_WRITEFUNCTION => null
+            ));
             curl_reset($this->handles[$id]);
 
             if (count($this->cache) <= $this->getConfig("cache_size")) {
@@ -239,8 +244,6 @@ class Client implements AsyncClientInterface
 
             unset($this->handles[$id]);
             unset($this->promises[$id]);
-            unset($this->requests[$id]);
-            unset($this->responses[$id]);
 
             $success = true;
         }
@@ -248,22 +251,30 @@ class Client implements AsyncClientInterface
         return $success;
     }
 
+    /**
+     * @param string|null $option
+     * @return mixed|null
+     */
     public function getConfig($option = null)
     {
-        $config = null;
+        $value = null;
         if ($option === null) {
-            $config = $this->config;
+            $value = $this->config;
         } elseif (isset($this->config[$option])) {
-            $config = $this->config[$option];
+            $value = $this->config[$option];
         }
 
-        return $config;
+        return $value;
     }
 
+    /**
+     * @param string|array $option
+     * @param mixed|null $value
+     */
     public function setConfig($option, $value = null)
     {
         if (is_array($option)) {
-            $this->config = $option + $this->getConfigDefaults();
+            $this->config = array_replace_recursive($this->getDefaultConfig(), $this->config, $option);
         } elseif (!is_object($option)) {
             $this->config[$option] = $value;
         }
@@ -272,12 +283,16 @@ class Client implements AsyncClientInterface
     /**
      * @return array
      */
-    protected function getConfigDefaults()
+    protected function getDefaultConfig()
     {
         return array(
             "cache_size" => 15,
-            "follow_redirects" => true,
-            "tick_interval" => 0.125
+            "tick_interval" => 0.125,
+            "curl_opts" =>[
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 30
+            ]
         );
     }
 }

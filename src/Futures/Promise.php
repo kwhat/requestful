@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Requestful\Futures;
 
 use ArrayAccess;
-use BadMethodCallException;
-use Exception;
+use InvalidArgumentException;
 use Iterator;
-use LogicException;
-use Requestful\Exceptions\CancellationException;
+use Requestful\Exceptions\PromiseException;
+use Throwable;
 
 /**
  * Promises/A+ implementation.
@@ -21,11 +20,11 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     /** @var string $state */
     protected $state = self::PENDING;
 
-    /** @var callable $onWait */
-    protected $onWait;
+    /** @var callable|null $fnWait */
+    protected $fnWait;
 
-    /** @var callable $onCancel */
-    protected $onCancel;
+    /** @var callable|null $fnCancel */
+    protected $fnCancel;
 
     /** @var array $properties */
     protected $properties = [];
@@ -34,40 +33,41 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     protected $result;
 
     /**
-     * @param callable $onWait Fn that when invoked resolves the promise.
-     * @param callable $onCancel Fn that when invoked cancels the promise.
+     * @param callable|null $fnWait Fn that when invoked resolves the promise.
+     * @param callable|null $fnCancel Fn that when invoked cancels the promise.
      */
-    public function __construct(callable $onWait = null, callable $onCancel = null)
+    public function __construct(?callable $fnWait = null, ?callable $fnCancel = null)
     {
-        $this->onWait = $onWait;
-        $this->onCancel = $onCancel;
+        $this->fnWait = $fnWait;
+        $this->fnCancel = $fnCancel;
     }
 
     /**
-     * @inheritDoc
+     * @throws PromiseException
      */
     public function cancel()
     {
-        if ($this->state == self::PENDING && $this->onCancel != null) {
+        if ($this->state == self::PENDING && $this->fnCancel != null) {
             try {
-                call_user_func($this->onCancel);
-                $this->reject(new CancellationException("Promise has been cancelled!"));
-            } catch (Exception $e) {
+                call_user_func($this->fnCancel);
+                throw new PromiseException("Promise was cancelled");
+            } catch (Throwable $e) {
                 $this->reject($e);
             }
         }
     }
 
     /**
-     * @inheritDoc
+     * @return string
      */
-    public function getState()
+    public function getState(): string
     {
         return $this->state;
     }
 
     /**
-     * @inheritDoc
+     * @param mixed $value
+     * @throws PromiseException
      */
     public function resolve($value)
     {
@@ -76,7 +76,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @param mixed $value
-     * @throws LogicException if the promise is already resolved.
+     * @throws PromiseException
      */
     public function reject($value)
     {
@@ -86,13 +86,14 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     /**
      * @param string $state
      * @param mixed $value
+     * @throws PromiseException
      */
-    private function settle($state, $value)
+    protected function settle($state, $value)
     {
         if ($this->state == $state && $this->result !== $value) {
-            throw new LogicException("The promise is already {$state}!");
+            throw new PromiseException("The promise is already {$state}!");
         } elseif ($this->state != self::PENDING) {
-            throw new LogicException("Cannot change a {$this->state} promise to {$state}!");
+            throw new PromiseException("Cannot change a {$this->state} promise to {$state}!");
         }
 
         $this->state = $state;
@@ -105,61 +106,79 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
      *
      * @return PromiseInterface
      */
-    public function then(callable $onFulfilled = null, callable $onRejected = null)
+    public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface
     {
-        $promise = $this;
-        if ($onFulfilled != null || $onRejected != null) {
-            $promise = new static(
-                function () use (&$promise, $onFulfilled, $onRejected) {
-                    try {
-                        $value = $this->wait();
-
-                        if ($this->getState() == self::FULFILLED && $onFulfilled != null) {
-                            $promise->resolve($onFulfilled($value));
-                        } elseif ($this->getState() == self::REJECTED && $onRejected != null) {
-                            $promise->reject($onRejected($value));
-                        }
-                    } catch (Exception $e) {
-                        $promise->reject($e);
-                    }
-                },
-                function () {
-                    $this->cancel();
-                }
-            );
+        if ($onFulfilled == null && $onRejected == null) {
+            throw new InvalidArgumentException("Both arguments to then cannot be null");
         }
+
+        /** @var static $promise */
+        $promise = new static(
+            function () use (&$promise, $onFulfilled, $onRejected) {
+                try {
+                    $value = $this->wait();
+
+                    if ($this->getState() == self::FULFILLED) {
+                        if ($onFulfilled != null) {
+                            $value = $onFulfilled($value);
+                        }
+
+                        $promise->resolve($value);
+                    } elseif ($this->getState() == self::REJECTED) {
+                        if ($onRejected != null) {
+                            $value = $onRejected($value);
+                        }
+
+                        $promise->reject($value);
+                    }
+                } catch (Throwable $e) {
+                    $promise->reject($e);
+                }
+            },
+            function () {
+                $this->cancel();
+            }
+        );
 
         return $promise;
     }
 
     /**
+     * @return mixed
+     * @throws PromiseException
+     */
+    public function unwrap()
+    {
+        $result = $this->wait();
+
+        // Unwrap nested promises
+        while ($result instanceof PromiseInterface) {
+            $result = $result->wait();
+        }
+
+        return $result;
+    }
+
+    /**
      * @inheritDoc
+     * @return mixed
+     * @throws PromiseException
      */
     public function wait()
     {
         if ($this->state == self::PENDING) {
-            if ($this->onWait == null) {
-                throw new BadMethodCallException("Cannot wait on a promise that has no internal wait function.");
+            if ($this->fnWait == null) {
+                throw new PromiseException("Cannot wait on a promise that has no internal wait function.");
             }
 
             try {
-                call_user_func($this->onWait);
-            } catch (Exception $e) {
-                if ($this->state != self::PENDING) {
-                    // The promise was already resolved, so there's a problem in
-                    // the application.
-                    throw new LogicException($e->getMessage(), $e->getCode(), $e);
+                call_user_func($this->fnWait);
+                if ($this->state == self::PENDING) {
+                    throw new PromiseException("Wait failed to resolve or reject the promise");
                 }
-
-                // The promise has not been resolved yet, so reject the promise
-                // with the exception.
+            } catch (Throwable $e) {
                 $this->reject($e);
             }
-        }
-
-        // Unroll nested promises...
-        while ($this->result instanceof PromiseInterface) {
-            $this->result = $this->result->wait();
         }
 
         return $this->result;

@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Requestful\Futures;
 
-use LogicException;
-use Requestful\Exceptions\CancellationException;
-
 /**
  * A promise represents the eventual result of an asynchronous operation.
  *
@@ -26,7 +23,6 @@ interface PromiseInterface
      * Cancels the promise if possible.
      *
      * @link https://github.com/promises-aplus/cancellation-spec/issues/7
-     * @throws CancellationException
      */
     public function cancel();
 
@@ -38,13 +34,12 @@ interface PromiseInterface
      *
      * @return string
      */
-    public function getState();
+    public function getState(): string;
 
     /**
      * Reject the promise with the given reason.
      *
      * @param mixed $value
-     * @throws LogicException if the promise is already resolved.
      */
     public function reject($value);
 
@@ -52,7 +47,6 @@ interface PromiseInterface
      * Resolve the promise with the given value.
      *
      * @param mixed $value
-     * @throws LogicException if the promise is already resolved.
      */
     public function resolve($value);
 
@@ -60,24 +54,29 @@ interface PromiseInterface
      * Appends fulfillment and rejection handlers to the promise, and returns
      * a new promise resolving to the return value of the called handler.
      *
-     * @param callable $onFulfilled Invoked when the promise fulfills.
-     * @param callable $onRejected Invoked when the promise is rejected.
+     * @param callable|null $onFulfilled Invoked when the promise fulfills.
+     * @param callable|null $onRejected Invoked when the promise is rejected.
      *
      * @return PromiseInterface
      */
-    public function then(callable $onFulfilled, callable $onRejected);
+    public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface;
 
     /**
-     * Waits until the promise completes if possible.
-     *
      * Pass $unwrap as true to unwrap the result of the promise, either
      * returning the resolved value or throwing the rejected exception.
      *
      * If the promise cannot be waited on, then the promise will be rejected.
      *
      * @return mixed
-     * @throws LogicException if the promise has no wait function or if the
-     *                        promise does not settle after waiting.
+     */
+    public function unwrap();
+
+    /**
+     * Waits until the promise completes if possible.
+     *
+     * If the promise cannot be waited on, then the promise will be rejected.
+     *
+     * @return mixed
      */
     public function wait();
 }
