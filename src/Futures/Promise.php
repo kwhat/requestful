@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Requestful\Futures;
 
 use ArrayAccess;
+use http\Exception\RuntimeException;
 use InvalidArgumentException;
 use Iterator;
+use Requestful\Exceptions\HttpClientException;
 use Requestful\Exceptions\PromiseException;
 use Throwable;
 
@@ -40,21 +42,6 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     {
         $this->fnWait = $fnWait;
         $this->fnCancel = $fnCancel;
-    }
-
-    /**
-     * @throws PromiseException
-     */
-    public function cancel()
-    {
-        if ($this->state == self::PENDING && $this->fnCancel != null) {
-            try {
-                call_user_func($this->fnCancel);
-                throw new PromiseException("Promise was cancelled");
-            } catch (Throwable $e) {
-                $this->reject($e);
-            }
-        }
     }
 
     /**
@@ -103,7 +90,6 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     /**
      * @param callable|null $onFulfilled
      * @param callable|null $onRejected
-     *
      * @return PromiseInterface
      */
     public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface
@@ -112,10 +98,10 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
             throw new InvalidArgumentException("Both arguments to then cannot be null");
         }
 
-        /** @var static $promise */
-        $promise = new static(
-            function () use (&$promise, $onFulfilled, $onRejected) {
+        return new static(
+            function (PromiseInterface $promise) use ($onFulfilled, $onRejected) {
                 try {
+                    // By calling parent->wait(), we implicitly unroll the loop.
                     $value = $this->wait();
 
                     if ($this->getState() == self::FULFILLED) {
@@ -139,24 +125,6 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
                 $this->cancel();
             }
         );
-
-        return $promise;
-    }
-
-    /**
-     * @return mixed
-     * @throws PromiseException
-     */
-    public function unwrap()
-    {
-        $result = $this->wait();
-
-        // Unwrap nested promises
-        while ($result instanceof PromiseInterface) {
-            $result = $result->wait();
-        }
-
-        return $result;
     }
 
     /**
@@ -167,21 +135,43 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     public function wait()
     {
         if ($this->state == self::PENDING) {
-            if ($this->fnWait == null) {
-                throw new PromiseException("Cannot wait on a promise that has no internal wait function.");
-            }
-
             try {
-                call_user_func($this->fnWait);
+                if ($this->fnWait == null) {
+                    throw new PromiseException("Cannot wait on a promise that has no wait callback available");
+                }
+
+                call_user_func($this->fnWait, $this);
                 if ($this->state == self::PENDING) {
                     throw new PromiseException("Wait failed to resolve or reject the promise");
                 }
             } catch (Throwable $e) {
                 $this->reject($e);
+                throw new PromiseException($e->getMessage(), $e->getCode(), $e);
             }
         }
 
         return $this->result;
+    }
+
+    /**
+     * @throws PromiseException
+     */
+    public function cancel()
+    {
+        if ($this->state == self::PENDING) {
+            try {
+                if ($this->fnCancel == null) {
+                    throw new PromiseException("Cannot cancel a promise that has no callback available");
+                }
+
+                call_user_func($this->fnCancel, $this);
+                if ($this->state == self::PENDING) {
+                    throw new PromiseException("Promise cancel callback failed to resolve or reject the promise");
+                }
+            } catch (Throwable $e) {
+                $this->reject($e);
+            }
+        }
     }
 
     /**

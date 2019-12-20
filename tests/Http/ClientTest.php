@@ -12,7 +12,7 @@ namespace Requestful\Http {
     function curl_multi_init()
     {
         TestCase::once();
-        return ClientTest::$mh;
+        return 1;
     }
 
     function curl_init()
@@ -29,9 +29,9 @@ namespace Requestful\Http {
 
     function curl_multi_add_handle($mh, $ch)
     {
-        TestCase::assertEquals(ClientTest::$mh, $mh);
+        TestCase::assertEquals(1, $mh);
         TestCase::assertEquals(2, $ch);
-        return 0;
+        return CURLM_OK;
     }
 
     function curl_getinfo($ch, $opt = null)
@@ -51,10 +51,10 @@ namespace Requestful\Http {
 
     function curl_multi_remove_handle($mh, $ch)
     {
-        TestCase::assertEquals(ClientTest::$mh, $mh);
+        TestCase::assertEquals(1, $mh);
         TestCase::assertEquals(2, $ch);
 
-        return 0;
+        return CURLM_OK;
     }
 
     function curl_reset($ch)
@@ -75,7 +75,7 @@ namespace Requestful\Http {
      */
     function curl_multi_exec($mh, &$still_running)
     {
-        TestCase::assertEquals(ClientTest::$mh, $mh);
+        TestCase::assertEquals(1, $mh);
 
         try {
             $ref = new ReflectionObject(ClientTest::$subject);
@@ -95,6 +95,13 @@ namespace Requestful\Http {
         return CURLM_OK;
     }
 
+    function curl_file_create($filename, $mimeType, $postname)
+    {
+        TestCase::assertEquals("/test/unit.json", $filename);
+        TestCase::assertEquals("application/json", $mimeType);
+        TestCase::assertEquals("test", $postname);
+    }
+
     function curl_multi_close($hm)
     {
         TestCase::assertTrue(isset($hm));
@@ -108,6 +115,8 @@ namespace Requestful\Http {
      */
     function curl_multi_info_read($mh, &$msgs_in_queue = null)
     {
+        TestCase::assertEquals(1, $mh);
+
         $msgs_in_queue = 0;
         return array(
             "msg" => CURLMSG_DONE,
@@ -124,7 +133,9 @@ namespace Requestful\Test\Http {
     use Psr\Http\Message\RequestInterface;
     use Psr\Http\Message\ResponseFactoryInterface;
     use Psr\Http\Message\ResponseInterface;
+    use Psr\Http\Message\ServerRequestInterface;
     use Psr\Http\Message\StreamInterface;
+    use Psr\Http\Message\UploadedFileInterface;
     use Requestful\Futures\PromiseInterface;
     use Requestful\Http\Client;
     use PHPUnit\Framework\TestCase;
@@ -133,9 +144,6 @@ namespace Requestful\Test\Http {
     {
         /** @var Client $subject */
         public static $subject;
-
-        /** @var resource|null $mh */
-        public static $mh = 1;
 
         public function setUp(): void
         {
@@ -162,13 +170,11 @@ namespace Requestful\Test\Http {
                 ->willReturn(strlen("stuff and things"));
 
             $response = $this->createMock(ResponseInterface::class);
-
             $response
                 ->expects($this->any())
                 ->method("withAddedHeader")
                 ->withAnyParameters()
                 ->willReturnSelf();
-
             $response
                 ->expects($this->any())
                 ->method("withProtocolVersion")
@@ -179,7 +185,6 @@ namespace Requestful\Test\Http {
                 ->method("withStatus")
                 ->with(200, "OK")
                 ->willReturnSelf();
-
             $response
                 ->expects($this->any())
                 ->method("getBody")
@@ -195,6 +200,13 @@ namespace Requestful\Test\Http {
             static::$subject = new Client($factory);
         }
 
+        public function tearDown(): void
+        {
+            parent::tearDown();
+
+            static::$subject->__destruct();
+        }
+
         /**
          * @throws ClientExceptionInterface
          */
@@ -202,66 +214,87 @@ namespace Requestful\Test\Http {
         {
             /** @var MockObject|StreamInterface $body */
             $body = $this->createMock(StreamInterface::class);
-
-            /** @var MockObject|RequestInterface $request */
-            $request = $this->createMock(RequestInterface::class);
-
             $body
                 ->expects($this->once())
                 ->method("rewind")
                 ->with();
-
             $body
                 ->expects($this->once())
                 ->method("getContents")
                 ->with()
                 ->willReturn("");
 
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
             $request
                 ->expects($this->once())
                 ->method("getBody")
                 ->with()
                 ->willReturn($body);
-
             $request
                 ->expects($this->once())
                 ->method("getHeaders")
                 ->with()
                 ->willReturn([]);
 
-            //static::$client = new Client($factory);
-            //$this->assertNotInstanceOf(PromiseInterface::class, static::$client->sendRequest($request));
-
-            static::$subject->sendRequest($request);
-            static::$subject->__destruct();
-            //$this->assertInstanceOf(ResponseInterface::class, $promise);
+            $result = static::$subject->sendRequest($request);
+            $this->assertNotInstanceOf(PromiseInterface::class, $result);
         }
 
         public function testSendRequestAsyncSuccess()
         {
             /** @var MockObject|StreamInterface $body */
             $body = $this->createMock(StreamInterface::class);
-
-            /** @var MockObject|RequestInterface $request */
-            $request = $this->createMock(RequestInterface::class);
-
             $body
                 ->expects($this->once())
                 ->method("rewind")
                 ->with();
-
             $body
                 ->expects($this->once())
                 ->method("getContents")
                 ->with()
                 ->willReturn("");
 
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
             $request
                 ->expects($this->once())
                 ->method("getBody")
                 ->with()
                 ->willReturn($body);
+            $request
+                ->expects($this->once())
+                ->method("getHeaders")
+                ->with()
+                ->willReturn(array("Content-Type" => ["text/plain"]));
 
+            $promise = static::$subject->sendRequestAsync($request);
+            $this->assertInstanceOf(PromiseInterface::class, $promise);
+
+            $promise->wait();
+        }
+
+        public function testSendRequestAsyncCancel()
+        {
+            /** @var MockObject|StreamInterface $body */
+            $body = $this->createMock(StreamInterface::class);
+            $body
+                ->expects($this->once())
+                ->method("rewind")
+                ->with();
+            $body
+                ->expects($this->once())
+                ->method("getContents")
+                ->with()
+                ->willReturn("");
+
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
+            $request
+                ->expects($this->once())
+                ->method("getBody")
+                ->with()
+                ->willReturn($body);
             $request
                 ->expects($this->once())
                 ->method("getHeaders")
@@ -271,8 +304,83 @@ namespace Requestful\Test\Http {
             $promise = static::$subject->sendRequestAsync($request);
             $this->assertInstanceOf(PromiseInterface::class, $promise);
 
-            $promise->wait();
-            static::$subject->__destruct();
+            $promise->cancel();
+        }
+
+        public function testSendServerRequestAsync()
+        {
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(ServerRequestInterface::class);
+            $request
+                ->expects($this->once())
+                ->method("getHeaders")
+                ->with()
+                ->willReturn([]);
+            $request
+                ->expects($this->atLeastOnce())
+                ->method("getAttributes")
+                ->with()
+                ->willReturn(["test" => "testing"]);
+            $request
+                ->expects($this->atLeastOnce())
+                ->method("getUploadedFiles")
+                ->with()
+                ->willReturn([]);
+
+            $promise = static::$subject->sendRequestAsync($request);
+            $this->assertInstanceOf(PromiseInterface::class, $promise);
+
+            $promise->cancel();
+        }
+
+        public function testSendServerRequestAsyncWithFileUploads()
+        {
+            $stream = $this->createMock(StreamInterface::class);
+            $stream
+                ->expects($this->once())
+                ->method("getMetadata")
+                ->with("uri")
+                ->willReturn("/test/unit.json");
+
+            $upload = $this->createMock(UploadedFileInterface::class);
+            $upload
+                ->expects($this->once())
+                ->method("getClientMediaType")
+                ->with()
+                ->willReturn("application/json");
+            $upload
+                ->expects($this->once())
+                ->method("getClientFilename")
+                ->with()
+                ->willReturn("test");
+            $upload
+                ->expects($this->once())
+                ->method("getStream")
+                ->with()
+                ->willReturn($stream);
+
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(ServerRequestInterface::class);
+            $request
+                ->expects($this->once())
+                ->method("getHeaders")
+                ->with()
+                ->willReturn([]);
+            $request
+                ->expects($this->atLeastOnce())
+                ->method("getAttributes")
+                ->with()
+                ->willReturn(["test" => "testing"]);
+            $request
+                ->expects($this->atLeastOnce())
+                ->method("getUploadedFiles")
+                ->with()
+                ->willReturn([$upload]);
+
+            $promise = static::$subject->sendRequestAsync($request);
+            $this->assertInstanceOf(PromiseInterface::class, $promise);
+
+            $promise->cancel();
         }
 
         public function testGetConfig()

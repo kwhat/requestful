@@ -11,6 +11,7 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UploadedFileInterface;
+use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
 use Requestful\Exceptions\HttpClientException;
@@ -26,9 +27,6 @@ class Client implements AsyncClientInterface
 
     /** @var resource $mh */
     protected $mh;
-
-    /** @var resource[] $handles */
-    protected $handles = [];
 
     /** @var resource[] $cache */
     protected $cache = [];
@@ -83,6 +81,7 @@ class Client implements AsyncClientInterface
     public function sendRequestAsync(RequestInterface $request): PromiseInterface
     {
         if (!function_exists("curl_multi_init")) {
+            /** @codeCoverageIgnore */
             throw new BadMethodCallException("Asynchronous support is not available (curl_multi_init not found)");
         }
 
@@ -91,9 +90,9 @@ class Client implements AsyncClientInterface
         }
 
         if (count($this->cache) > 0) {
-            $resource = array_shift($this->cache);
+            $handle = array_shift($this->cache);
         } else {
-            $resource = curl_init();
+            $handle = curl_init();
         }
 
         $headers = $request->getHeaders();
@@ -101,7 +100,7 @@ class Client implements AsyncClientInterface
             $headers[$key] = implode(", ", $value);
         }
 
-        curl_setopt_array($resource, array(
+        curl_setopt_array($handle, array(
                 CURLOPT_URL => $request->getUri(),
                 CURLOPT_CUSTOMREQUEST => $request->getMethod(),
                 CURLOPT_POSTFIELDS => $this->getCurlPostFields($request),
@@ -115,19 +114,20 @@ class Client implements AsyncClientInterface
                 CURLOPT_WRITEFUNCTION => [$this, "writeBody"]
             ) + $this->getConfig("curl_opts", array()));
 
-        $id = (int)$resource;
-        curl_multi_add_handle($this->mh, $resource);
+        $id = (int)$handle;
+        curl_multi_add_handle($this->mh, $handle);
 
         $this->promises[$id] = new Promise(
-            function () use ($id) {
-                while ($this->promises[$id]->getState() == PromiseInterface::PENDING) {
+            function (PromiseInterface $promise) {
+                while ($promise->getState() == PromiseInterface::PENDING) {
                     $this->tick();
                 }
 
-                return $this->promises[$id]->wait();
+                return $promise->wait();
             },
-            function () use ($id) {
-                $this->close($id);
+            function (PromiseInterface $promise) use ($handle) {
+                $promise->resolve(new PromiseException("Promise was canceled"));
+                $this->close($handle);
             }
         );
         $this->promises[$id]["HTTP_START_TIME"] = microtime(true);
@@ -166,13 +166,13 @@ class Client implements AsyncClientInterface
     }
 
     /**
-     * @param $resource
+     * @param $handle
      * @param $header
      * @return int
      */
-    protected function writeHeader($resource, $header)
+    protected function writeHeader($handle, $header)
     {
-        $id = (int)$resource;
+        $id = (int)$handle;
 
         /** @var ResponseInterface $response */
         if (($pos = strpos($header, ":")) !== false) {
@@ -189,9 +189,9 @@ class Client implements AsyncClientInterface
         return strlen($header);
     }
 
-    protected function writeBody($resource, $body)
+    protected function writeBody($handle, $body)
     {
-        $id = (int)$resource;
+        $id = (int)$handle;
 
         /** @var ResponseInterface $response */
         $response = $this->promises[$id]["HTTP_RESPONSE"];
@@ -222,7 +222,7 @@ class Client implements AsyncClientInterface
                     $this->promises[$id]->reject(new Exception(curl_error($info["handle"]), $info["result"]));
                 }
 
-                $this->close($id);
+                $this->close($info["handle"]);
             }
 
             if ($active) {
@@ -233,26 +233,24 @@ class Client implements AsyncClientInterface
     }
 
 
-    protected function close($id)
+    protected function close($handle)
     {
         $success = false;
-        if (isset($this->handles[$id])) {
-            curl_multi_remove_handle($this->mh, $this->handles[$id]);
-            curl_setopt_array($this->handles[$id], array(
+        if (curl_multi_remove_handle($this->mh, $handle) == CURLM_OK) {
+            curl_setopt_array($handle, array(
                 CURLOPT_HEADERFUNCTION => null,
                 CURLOPT_WRITEFUNCTION => null
             ));
-            curl_reset($this->handles[$id]);
+            curl_reset($handle);
 
             if (count($this->cache) <= $this->getConfig("cache_size")) {
-                $this->cache[] = $this->handles[$id];
+                $this->cache[] = $handle;
             } else {
-                curl_close($this->handles[$id]);
+                curl_close($handle);
             }
 
-            unset($this->handles[$id]);
-            unset($this->promises[$id]);
-
+            // FIXME Why is this resolving the promise?
+            unset($this->promises[(int)$handle]);
             $success = true;
         }
 

@@ -62,16 +62,6 @@ interface PromiseInterface
     public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface;
 
     /**
-     * Pass $unwrap as true to unwrap the result of the promise, either
-     * returning the resolved value or throwing the rejected exception.
-     *
-     * If the promise cannot be waited on, then the promise will be rejected.
-     *
-     * @return mixed
-     */
-    public function unwrap();
-
-    /**
      * Waits until the promise completes if possible.
      *
      * If the promise cannot be waited on, then the promise will be rejected.

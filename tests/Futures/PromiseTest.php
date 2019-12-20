@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Requestful\Test\Futures;
 
+use InvalidArgumentException;
 use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
@@ -11,55 +12,30 @@ use PHPUnit\Framework\TestCase;
 
 class PromiseTest extends TestCase
 {
-    /**
-     * @throws PromiseException
-     */
-    /*
     public function testWait()
-    {
-        $value = "Test Value";
-
-        $promise = new Promise(
-            function () use (&$promise, $value) {
-                /** @var Promise $promise *
-                $promise->resolve($value);
-            }
-        );
-
-        $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
-        $this->assertSame($value, $promise->wait());
-        $this->assertEquals(PromiseInterface::FULFILLED, $promise->getState());
-    }
-    */
-
-    public function testUnwrap()
     {
         $value = "Test Value";
 
         /** @var PromiseInterface $base */
         $base = new Promise(
             function () use (&$base, $value) {
-                echo 0;
                 $base->resolve($value);
             }
         );
 
         $promise = $base
             ->then(function ($response) {
-                echo 1;
                 return strtoupper($response);
             })
             ->then(function ($response) {
-                echo 2;
                 return $response;
             })
             ->then(function ($response) {
-                echo 3;
                 return strtolower($response);
             });
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
-        $this->assertEquals(strtolower($value), $promise->unwrap());
+        $this->assertEquals(strtolower($value), $promise->wait());
         $this->assertEquals(PromiseInterface::FULFILLED, $promise->getState());
     }
 
@@ -77,7 +53,12 @@ class PromiseTest extends TestCase
         );
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
-        $this->assertSame($promise->wait(), $value);
+
+        $this->expectException(PromiseException::class);
+        $this->expectExceptionCode($value->getCode());
+        $this->expectExceptionMessage($value->getMessage());
+
+        $this->assertInstanceOf(PromiseException::class, $promise->wait());
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
@@ -124,15 +105,16 @@ class PromiseTest extends TestCase
         $isCanceled = false;
         $promise = new Promise(
             null,
-            function () use (&$isCanceled) {
+            function (PromiseInterface $promise) use (&$isCanceled) {
                 $isCanceled = true;
+                $promise->reject("Canceled");
             }
         );
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
         $promise->cancel();
 
-        $this->assertInstanceOf(PromiseException::class, $promise->wait());
+        $this->assertEquals("Canceled", $promise->wait());
         $this->assertTrue($isCanceled);
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
@@ -151,8 +133,10 @@ class PromiseTest extends TestCase
         );
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
-        $promise->cancel();
-        $this->assertEquals($value, $promise->wait());
+
+        $this->expectException(PromiseException::class);
+
+        $promise->wait();
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
@@ -251,7 +235,9 @@ class PromiseTest extends TestCase
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
-
+    /**
+     * @throws PromiseException
+     */
     public function testResolveAgainFailure()
     {
         $this->expectException(PromiseException::class);
@@ -269,6 +255,9 @@ class PromiseTest extends TestCase
         $promise->resolve("New {$value}");
     }
 
+    /**
+     * @throws PromiseException
+     */
     public function testRejectAgainFailure()
     {
         $this->expectException(PromiseException::class);
@@ -288,9 +277,54 @@ class PromiseTest extends TestCase
 
     public function testNoCallbacks()
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         $promise = new Promise();
         $promise->then();
+    }
+
+    public function testDirectAccess()
+    {
+        $promise = new Promise();
+        $promise["test"] = "testing";
+
+        $this->assertTrue(isset($promise["test"]));
+        $this->assertFalse(isset($promise["invalid"]));
+
+        unset($promise["test"]);
+        $this->assertFalse(isset($promise["test"]));
+    }
+
+    public function testIteratorAccess()
+    {
+        $promise = new Promise();
+        for ($i = 1; $i < 5; $i++) {
+            $promise->{"test{$i}"} = $i;
+        }
+
+        $i = 0;
+        foreach ($promise as $property) {
+            $i++;
+            $this->assertTrue(isset($promise->{"test{$i}"}));
+            $this->assertEquals($i, $property);
+
+            unset($promise->test);
+            $this->assertFalse(isset($promise->test));
+        }
+
+        $this->assertFalse(isset($promise->invalid));
+    }
+
+    public function testMagicAccess()
+    {
+        $promise = new Promise();
+        $promise->test = "testing";
+
+        $this->assertTrue(isset($promise->test));
+        $this->assertFalse(isset($promise->invalid));
+        $this->assertEquals("testing", $promise->test);
+
+        unset($promise->test);
+        $this->assertFalse(isset($promise->test));
     }
 }
