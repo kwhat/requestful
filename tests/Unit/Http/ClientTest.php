@@ -27,6 +27,12 @@ namespace Requestful\Http {
         return true;
     }
 
+    function curl_exec($ch)
+    {
+        TestCase::assertEquals(2, $ch);
+        return true;
+    }
+
     function curl_multi_add_handle($mh, $ch)
     {
         TestCase::assertEquals(1, $mh);
