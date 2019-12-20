@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Requestful\Http;
 
+use BadMethodCallException;
 use Exception;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
@@ -60,6 +61,7 @@ class Client implements AsyncClientInterface
      */
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
+        // TODO We should not rely on curl multi, use curl here and possibly fallback to get_file_contents
         try {
             // Because we are in control of the promise from start to finish,
             // we can assume that we will always return ResponseInterface.
@@ -80,6 +82,10 @@ class Client implements AsyncClientInterface
      */
     public function sendRequestAsync(RequestInterface $request): PromiseInterface
     {
+        if (!function_exists("curl_multi_init")) {
+            throw new BadMethodCallException("Asynchronous support is not available (curl_multi_init not found)");
+        }
+
         if (!isset($this->mh)) {
             $this->mh = curl_multi_init();
         }
@@ -90,42 +96,24 @@ class Client implements AsyncClientInterface
             $resource = curl_init();
         }
 
-        if (method_exists($request, "getUploadedFiles") && !empty($request->getUploadedFiles())) {
-            $fields = $request->getAttributes();
-            foreach ($request->getUploadedFiles() as $name => $file) {
-                /** @var UploadedFileInterface $file */
-                $fields[$name] = curl_file_create(
-                    $file->getStream()->getMetadata("uri"),
-                    $file->getClientMediaType(),
-                    $file->getClientFilename()
-                );
-            }
-        } elseif (method_exists($request, "getAttributes") && !empty($request->getAttributes())) {
-            $fields = $request->getAttributes();
-        } else {
-            $body = $request->getBody();
-            $body->rewind();
-            $fields = $body->getContents();
-        }
-
         $headers = $request->getHeaders();
         foreach ($headers as $key => $value) {
             $headers[$key] = implode(", ", $value);
         }
 
         curl_setopt_array($resource, array(
-            CURLOPT_URL => $request->getUri(),
-            CURLOPT_CUSTOMREQUEST => $request->getMethod(),
-            CURLOPT_POSTFIELDS => $fields,
-            CURLOPT_VERBOSE => false,
-            CURLOPT_HEADER => false,
-            CURLOPT_SAFE_UPLOAD => true,
-            CURLOPT_RETURNTRANSFER => false,
-            CURLOPT_NOBODY => false,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_HEADERFUNCTION => [$this, "writeHeader"],
-            CURLOPT_WRITEFUNCTION => [$this, "writeBody"]
-        ) + $this->getConfig("curl_opts"));
+                CURLOPT_URL => $request->getUri(),
+                CURLOPT_CUSTOMREQUEST => $request->getMethod(),
+                CURLOPT_POSTFIELDS => $this->getCurlPostFields($request),
+                CURLOPT_VERBOSE => true,
+                CURLOPT_HEADER => false,
+                CURLOPT_SAFE_UPLOAD => true,
+                CURLOPT_RETURNTRANSFER => false,
+                CURLOPT_NOBODY => false,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_HEADERFUNCTION => [$this, "writeHeader"],
+                CURLOPT_WRITEFUNCTION => [$this, "writeBody"]
+            ) + $this->getConfig("curl_opts", array()));
 
         $id = (int)$resource;
         curl_multi_add_handle($this->mh, $resource);
@@ -147,6 +135,34 @@ class Client implements AsyncClientInterface
         $this->promises[$id]["HTTP_RESPONSE"] = $this->factory->createResponse();
 
         return $this->promises[$id];
+    }
+
+    /**
+     * Return the curl body from the
+     * @param RequestInterface $request
+     * @return array|string
+     */
+    private function getCurlPostFields(RequestInterface $request)
+    {
+        if (method_exists($request, "getUploadedFiles") && !empty($request->getUploadedFiles())) {
+            $fields = $request->getAttributes();
+            foreach ($request->getUploadedFiles() as $name => $file) {
+                /** @var UploadedFileInterface $file */
+                $fields[$name] = curl_file_create(
+                    $file->getStream()->getMetadata("uri"),
+                    $file->getClientMediaType(),
+                    $file->getClientFilename()
+                );
+            }
+        } elseif (method_exists($request, "getAttributes") && !empty($request->getAttributes())) {
+            $fields = $request->getAttributes();
+        } else {
+            $body = $request->getBody();
+            $body->rewind();
+            $fields = $body->getContents();
+        }
+
+        return $fields;
     }
 
     /**
@@ -245,11 +261,12 @@ class Client implements AsyncClientInterface
 
     /**
      * @param string|null $option
+     * @param mixed|null $default
      * @return mixed|null
      */
-    public function getConfig($option = null)
+    public function getConfig($option = null, $default = null)
     {
-        $value = null;
+        $value = $default;
         if ($option === null) {
             $value = $this->config;
         } elseif (isset($this->config[$option])) {

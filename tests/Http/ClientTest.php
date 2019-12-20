@@ -4,25 +4,68 @@ declare(strict_types=1);
 
 namespace Requestful\Http {
 
-    use Requestful\Test\Http\ClientTest;
+    use PHPUnit\Framework\TestCase;
     use ReflectionException;
     use ReflectionObject;
+    use Requestful\Test\Http\ClientTest;
 
-    /*
-    function curl_setopt_array($handle, array $options)
+    function curl_multi_init()
     {
+        TestCase::once();
+        return ClientTest::$mh;
+    }
+
+    function curl_init()
+    {
+        return 2;
+    }
+
+    function curl_setopt_array($ch, array $options)
+    {
+        TestCase::assertEquals(2, $ch);
+        TestCase::assertNotEmpty($options);
         return true;
     }
 
+    function curl_multi_add_handle($mh, $ch)
+    {
+        TestCase::assertEquals(ClientTest::$mh, $mh);
+        TestCase::assertEquals(2, $ch);
+        return 0;
+    }
 
     function curl_getinfo($ch, $opt = null)
     {
-        return array(
-            "handle"
+        TestCase::assertEquals(2, $ch);
 
-        );
+        switch ($opt) {
+            case CURLINFO_TOTAL_TIME:
+                return 5.125;
+
+            default:
+                TestCase::fail("Unexpected curl opt");
+        }
+
+        return array();
     }
-    */
+
+    function curl_multi_remove_handle($mh, $ch)
+    {
+        TestCase::assertEquals(ClientTest::$mh, $mh);
+        TestCase::assertEquals(2, $ch);
+
+        return 0;
+    }
+
+    function curl_reset($ch)
+    {
+        TestCase::assertEquals(2, $ch);
+    }
+
+    function curl_close($ch)
+    {
+        TestCase::assertEquals(2, $ch);
+    }
 
     /**
      * @param resource $mh
@@ -32,21 +75,29 @@ namespace Requestful\Http {
      */
     function curl_multi_exec($mh, &$still_running)
     {
-        $still_running = 1;
+        TestCase::assertEquals(ClientTest::$mh, $mh);
 
-        /*
-        $ref = new ReflectionObject(ClientTest::$client);
-        $method = $ref->getMethod("writeHeader");
-        $method->setAccessible(true);
-        $method->invoke(ClientTest::$client, ClientTest::$handle, "HTTP/1.1 200 OK\r\n");
-        $method->invoke(ClientTest::$client, ClientTest::$handle, "Content-Type: application/json\r\n");
+        try {
+            $ref = new ReflectionObject(ClientTest::$subject);
+            $method = $ref->getMethod("writeHeader");
+            $method->setAccessible(true);
+            $method->invoke(ClientTest::$subject, 2, "HTTP/1.1 200 OK\r\n");
+            $method->invoke(ClientTest::$subject, 2, "Content-Type: text/plain\r\n");
 
-        $method = $ref->getMethod("writeBody");
-        $method->setAccessible(true);
-        $method->invoke(ClientTest::$client, ClientTest::$handle, "{}");
-        //*/
+            $method = $ref->getMethod("writeBody");
+            $method->setAccessible(true);
+            $method->invoke(ClientTest::$subject, 2, "stuff and things");
+        } catch (ReflectionException $e) {
+            TestCase::fail($e->getMessage());
+        }
 
+        $still_running = 0;
         return CURLM_OK;
+    }
+
+    function curl_multi_close($hm)
+    {
+        TestCase::assertTrue(isset($hm));
     }
 
     /**
@@ -54,15 +105,16 @@ namespace Requestful\Http {
      * @param int|null $msgs_in_queue
      *
      * @return array
+     */
     function curl_multi_info_read($mh, &$msgs_in_queue = null)
     {
+        $msgs_in_queue = 0;
         return array(
             "msg" => CURLMSG_DONE,
             "result" => CURLE_OK,
-            "handle" => curl_init()
+            "handle" => 2
         );
     }
-    */
 }
 
 namespace Requestful\Test\Http {
@@ -71,6 +123,7 @@ namespace Requestful\Test\Http {
     use Psr\Http\Client\ClientExceptionInterface;
     use Psr\Http\Message\RequestInterface;
     use Psr\Http\Message\ResponseFactoryInterface;
+    use Psr\Http\Message\ResponseInterface;
     use Psr\Http\Message\StreamInterface;
     use Requestful\Futures\PromiseInterface;
     use Requestful\Http\Client;
@@ -81,12 +134,63 @@ namespace Requestful\Test\Http {
         /** @var Client $subject */
         public static $subject;
 
+        /** @var resource|null $mh */
+        public static $mh = 1;
+
         public function setUp(): void
         {
             parent::setUp();
 
             /** @var MockObject|ResponseFactoryInterface $factory */
             $factory = $this->createMock(ResponseFactoryInterface::class);
+
+            /** @var MockObject|StreamInterface $body */
+            $body = $this->createMock(StreamInterface::class);
+            $body
+                ->expects($this->any())
+                ->method("rewind")
+                ->with();
+            $body
+                ->expects($this->any())
+                ->method("getContents")
+                ->with()
+                ->willReturn("");
+            $body
+                ->expects($this->any())
+                ->method("write")
+                ->with("stuff and things")
+                ->willReturn(strlen("stuff and things"));
+
+            $response = $this->createMock(ResponseInterface::class);
+
+            $response
+                ->expects($this->any())
+                ->method("withAddedHeader")
+                ->withAnyParameters()
+                ->willReturnSelf();
+
+            $response
+                ->expects($this->any())
+                ->method("withProtocolVersion")
+                ->with("1.1")
+                ->willReturnSelf();
+            $response
+                ->expects($this->any())
+                ->method("withStatus")
+                ->with(200, "OK")
+                ->willReturnSelf();
+
+            $response
+                ->expects($this->any())
+                ->method("getBody")
+                ->with()
+                ->willReturn($body);
+
+            $factory
+                ->expects($this->any())
+                ->method("createResponse")
+                ->with()
+                ->willReturn($response);
 
             static::$subject = new Client($factory);
         }
@@ -129,6 +233,7 @@ namespace Requestful\Test\Http {
             //$this->assertNotInstanceOf(PromiseInterface::class, static::$client->sendRequest($request));
 
             static::$subject->sendRequest($request);
+            static::$subject->__destruct();
             //$this->assertInstanceOf(ResponseInterface::class, $promise);
         }
 
@@ -167,6 +272,7 @@ namespace Requestful\Test\Http {
             $this->assertInstanceOf(PromiseInterface::class, $promise);
 
             $promise->wait();
+            static::$subject->__destruct();
         }
 
         public function testGetConfig()
