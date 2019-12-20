@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace Requestful\Futures;
 
 use ArrayAccess;
-use http\Exception\RuntimeException;
 use InvalidArgumentException;
 use Iterator;
-use Requestful\Exceptions\HttpClientException;
 use Requestful\Exceptions\PromiseException;
 use Throwable;
 

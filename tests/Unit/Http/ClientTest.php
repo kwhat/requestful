@@ -7,7 +7,7 @@ namespace Requestful\Http {
     use PHPUnit\Framework\TestCase;
     use ReflectionException;
     use ReflectionObject;
-    use Requestful\Test\Http\ClientTest;
+    use Requestful\Test\Unit\Http\ClientTest;
 
     function curl_multi_init()
     {
@@ -134,7 +134,7 @@ namespace Requestful\Http {
     }
 }
 
-namespace Requestful\Test\Http {
+namespace Requestful\Test\Unit\Http {
 
     use PHPUnit\Framework\MockObject\MockObject;
     use Psr\Http\Client\ClientExceptionInterface;

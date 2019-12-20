@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Requestful\Http;
 
 use BadMethodCallException;
-use Exception;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;

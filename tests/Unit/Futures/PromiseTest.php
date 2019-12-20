@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Requestful\Test\Futures;
+namespace Requestful\Test\Unit\Futures;
 
 use InvalidArgumentException;
 use Requestful\Exceptions\PromiseException;
