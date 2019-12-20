@@ -11,6 +11,7 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UploadedFileInterface;
+use Requestful\Exceptions\HttpNetworkException;
 use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
@@ -60,16 +61,22 @@ class Client implements AsyncClientInterface
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
         // TODO We should not rely on curl multi, use curl here and possibly fallback to get_file_contents
+        // @codeCoverageIgnoreStart
         try {
+            // @codeCoverageIgnoreEnd
+
             // Because we are in control of the promise from start to finish,
             // we can assume that we will always return ResponseInterface.
             $response = $this->sendRequestAsync($request)->wait();
             if ($response instanceof Throwable) {
                 throw $response;
             }
+
+            // @codeCoverageIgnoreStart
         } catch (Throwable $e) {
             throw new HttpClientException($e->getMessage(), $e->getCode(), $e);
         }
+        // @codeCoverageIgnoreEnd
 
         return $response;
     }
@@ -81,8 +88,9 @@ class Client implements AsyncClientInterface
     public function sendRequestAsync(RequestInterface $request): PromiseInterface
     {
         if (!function_exists("curl_multi_init")) {
-            /** @codeCoverageIgnore */
+            // @codeCoverageIgnoreStart
             throw new BadMethodCallException("Asynchronous support is not available (curl_multi_init not found)");
+            // @codeCoverageIgnoreEnd
         }
 
         if (!isset($this->mh)) {
@@ -218,8 +226,11 @@ class Client implements AsyncClientInterface
                     $response->getBody()->rewind();
                     $this->promises[$id]->resolve($response);
                 } else {
-                    // TODO NetworkException
-                    $this->promises[$id]->reject(new Exception(curl_error($info["handle"]), $info["result"]));
+                    // @codeCoverageIgnoreStart
+                    $this->promises[$id]->reject(
+                        new HttpNetworkException(curl_error($info["handle"]), $info["result"])
+                    );
+                    // @codeCoverageIgnoreEnd
                 }
 
                 $this->close($info["handle"]);
@@ -243,7 +254,7 @@ class Client implements AsyncClientInterface
             ));
             curl_reset($handle);
 
-            if (count($this->cache) <= $this->getConfig("cache_size")) {
+            if (count($this->cache) < $this->getConfig("cache_size")) {
                 $this->cache[] = $handle;
             } else {
                 curl_close($handle);

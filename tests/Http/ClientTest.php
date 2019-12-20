@@ -67,6 +67,14 @@ namespace Requestful\Http {
         TestCase::assertEquals(2, $ch);
     }
 
+    function curl_multi_select($mh, $timeout)
+    {
+        TestCase::assertEquals(1, $mh);
+        TestCase::assertIsFloat($timeout);
+
+        return 0;
+    }
+
     /**
      * @param resource $mh
      * @param int $still_running
@@ -91,7 +99,7 @@ namespace Requestful\Http {
             TestCase::fail($e->getMessage());
         }
 
-        $still_running = 0;
+        $still_running = 1;
         return CURLM_OK;
     }
 
@@ -236,6 +244,80 @@ namespace Requestful\Test\Http {
                 ->method("getHeaders")
                 ->with()
                 ->willReturn([]);
+
+            $result = static::$subject->sendRequest($request);
+            $this->assertNotInstanceOf(PromiseInterface::class, $result);
+        }
+
+        /**
+         * @throws ClientExceptionInterface
+         */
+        public function testSendRequestWithCache()
+        {
+            /** @var MockObject|StreamInterface $body */
+            $body = $this->createMock(StreamInterface::class);
+            $body
+                ->expects($this->exactly(2))
+                ->method("rewind")
+                ->with();
+            $body
+                ->expects($this->exactly(2))
+                ->method("getContents")
+                ->with()
+                ->willReturn("");
+
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
+            $request
+                ->expects($this->exactly(2))
+                ->method("getBody")
+                ->with()
+                ->willReturn($body);
+            $request
+                ->expects($this->exactly(2))
+                ->method("getHeaders")
+                ->with()
+                ->willReturn([]);
+
+            $result = static::$subject->sendRequest($request);
+            $this->assertNotInstanceOf(PromiseInterface::class, $result);
+
+            $result = static::$subject->sendRequest($request);
+            $this->assertNotInstanceOf(PromiseInterface::class, $result);
+        }
+
+
+        /**
+         * @throws ClientExceptionInterface
+         */
+        public function testSendRequestWithoutCache()
+        {
+            /** @var MockObject|StreamInterface $body */
+            $body = $this->createMock(StreamInterface::class);
+            $body
+                ->expects($this->once())
+                ->method("rewind")
+                ->with();
+            $body
+                ->expects($this->once())
+                ->method("getContents")
+                ->with()
+                ->willReturn("");
+
+            /** @var MockObject|RequestInterface $request */
+            $request = $this->createMock(RequestInterface::class);
+            $request
+                ->expects($this->once())
+                ->method("getBody")
+                ->with()
+                ->willReturn($body);
+            $request
+                ->expects($this->once())
+                ->method("getHeaders")
+                ->with()
+                ->willReturn([]);
+
+            static::$subject->setConfig("cache_size", 0);
 
             $result = static::$subject->sendRequest($request);
             $this->assertNotInstanceOf(PromiseInterface::class, $result);
