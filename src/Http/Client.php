@@ -10,7 +10,6 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UploadedFileInterface;
-use ReflectionException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
 use Requestful\Exceptions\HttpClientException;
@@ -131,7 +130,7 @@ class Client implements AsyncClientInterface
         $id = (int)$resource;
         curl_multi_add_handle($this->mh, $resource);
 
-        $promise = new Promise(
+        $this->promises[$id] = new Promise(
             function () use ($id) {
                 while ($this->promises[$id]->getState() == PromiseInterface::PENDING) {
                     $this->tick();
@@ -143,17 +142,11 @@ class Client implements AsyncClientInterface
                 $this->close($id);
             }
         );
+        $this->promises[$id]["HTTP_START_TIME"] = microtime(true);
+        $this->promises[$id]["HTTP_REQUEST"] = $request;
+        $this->promises[$id]["HTTP_RESPONSE"] = $this->factory->createResponse();
 
-        $response = $this->factory->createResponse();
-
-        $promise["HTTP_START_TIME"] = microtime(true);
-        $promise["HTTP_REQUEST"] = $request;
-        $promise["HTTP_RESPONSE"] = $response;
-
-        $this->handles[$id] = $resource;
-        $this->promises[$id] = $promise;
-
-        return $promise;
+        return $this->promises[$id];
     }
 
     /**
@@ -192,7 +185,6 @@ class Client implements AsyncClientInterface
 
     /**
      * Ticks the curl event loop.
-     * @throws ReflectionException
      */
     protected function tick()
     {
