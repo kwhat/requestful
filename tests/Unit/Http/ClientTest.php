@@ -45,6 +45,28 @@ namespace Requestful\Http {
         TestCase::assertEquals(2, $ch);
 
         switch ($opt) {
+            case null:
+                return array(
+                    "total_time" => 5.125,
+                    "namelookup_time" => 0.25,
+                    "connect_time" => 0.5,
+                    "pretransfer_time" => 0.42,
+                    "starttransfer_time" => microtime(true),
+                    "redirect_count" => 0,
+                    "redirect_time" => 0.0,
+                    "ssl_verify_result" => null,
+                    "certinfo" => null
+                );
+
+            case CURLINFO_APPCONNECT_TIME:
+                return 1.125;
+
+            case CURLINFO_NUM_CONNECTS:
+                return 1;
+
+            case CURLINFO_SSL_ENGINES:
+                return "RSA EEC";
+
             case CURLINFO_TOTAL_TIME:
                 return 5.125;
 

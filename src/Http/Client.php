@@ -29,7 +29,7 @@ class Client implements AsyncClientInterface
     /** @var resource $mh */
     protected $mh;
 
-    /** @var PromiseInterface[] $promises */
+    /** @var PromiseInterface[]|array<int,array<int|string,mixed>> $promises */
     protected $promises = [];
 
     /**
@@ -69,11 +69,10 @@ class Client implements AsyncClientInterface
                     // @codeCoverageIgnoreEnd
                 }
 
-                $promise->resolve($this->promises[(int)$handle]["HTTP_RESPONSE"]);
+                $promise->resolve($this->promises[(int)$handle]["PSR7_RESPONSE"]);
             });
-            $this->promises[$id]["HTTP_START_TIME"] = microtime(true);
-            $this->promises[$id]["HTTP_REQUEST"] = $request;
-            $this->promises[$id]["HTTP_RESPONSE"] = $this->factory->createResponse();
+            $this->promises[$id]["PSR7_REQUEST"] = $request;
+            $this->promises[$id]["PSR7_RESPONSE"] = $this->factory->createResponse();
 
             $response = $this->promises[$id]->wait();
 
@@ -101,7 +100,7 @@ class Client implements AsyncClientInterface
             // @codeCoverageIgnoreEnd
         }
 
-        if (!isset($this->mh)) {
+        if ($this->mh === null) {
             $this->mh = curl_multi_init();
         }
 
@@ -127,8 +126,8 @@ class Client implements AsyncClientInterface
             }
         );
         $this->promises[$id]["HTTP_START_TIME"] = microtime(true);
-        $this->promises[$id]["HTTP_REQUEST"] = $request;
-        $this->promises[$id]["HTTP_RESPONSE"] = $this->factory->createResponse();
+        $this->promises[$id]["PSR7_REQUEST"] = $request;
+        $this->promises[$id]["PSR7_RESPONSE"] = $this->factory->createResponse();
 
         return $this->promises[$id];
     }
@@ -215,12 +214,12 @@ class Client implements AsyncClientInterface
 
         /** @var ResponseInterface $response */
         if (($pos = strpos($header, ":")) !== false) {
-            $response = $this->promises[$id]["HTTP_RESPONSE"];
-            $this->promises[$id]["HTTP_RESPONSE"] = $response
+            $response = $this->promises[$id]["PSR7_RESPONSE"];
+            $this->promises[$id]["PSR7_RESPONSE"] = $response
                 ->withAddedHeader(substr($header, 0, $pos), substr($header, $pos + 1));
         } elseif (preg_match('/^HTTP\/([0-9.]+)\s+([0-9]{3})\s*(\S*)/i', $header, $matches)) {
-            $response = $this->promises[$id]["HTTP_RESPONSE"];
-            $this->promises[$id]["HTTP_RESPONSE"] = $response
+            $response = $this->promises[$id]["PSR7_RESPONSE"];
+            $this->promises[$id]["PSR7_RESPONSE"] = $response
                 ->withProtocolVersion($matches[1])
                 ->withStatus((int)$matches[2], $matches[3]);
         }
@@ -233,7 +232,7 @@ class Client implements AsyncClientInterface
         $id = (int)$handle;
 
         /** @var ResponseInterface $response */
-        $response = $this->promises[$id]["HTTP_RESPONSE"];
+        $response = $this->promises[$id]["PSR7_RESPONSE"];
 
         return $response->getBody()->write($body);
     }
@@ -251,17 +250,19 @@ class Client implements AsyncClientInterface
                 $handle = $info["handle"];
                 $id = (int)$handle;
 
-                $this->promises[$id]["CURL_TOTAL_TIME"] = curl_getinfo($handle, CURLINFO_TOTAL_TIME);
-                $this->promises[$id]["CURL_NAMELOOKUP_TIME"] = curl_getinfo($handle, CURLINFO_NAMELOOKUP_TIME);
-                $this->promises[$id]["CURL_CONNECT_TIME"] = curl_getinfo($handle, CURLINFO_CONNECT_TIME);
-                $this->promises[$id]["CURL_PRETRANSFER_TIME"] = curl_getinfo($handle, CURLINFO_PRETRANSFER_TIME);
-                $this->promises[$id]["CURL_STARTTRANSFER_TIME"] = curl_getinfo($handle, CURLINFO_PRETRANSFER_TIME);
-                $this->promises[$id]["CURL_REDIRECT_COUNT"] = curl_getinfo($handle, CURLINFO_REDIRECT_COUNT);
-                $this->promises[$id]["CURL_REDIRECT_TIME"] = curl_getinfo($handle, CURLINFO_REDIRECT_TIME);
+                $defaults = curl_getinfo($handle);
+                $this->promises[$id]["CURL_TOTAL_TIME"] = $defaults["total_time"];
+                $this->promises[$id]["CURL_NAMELOOKUP_TIME"] = $defaults["namelookup_time"];
+                $this->promises[$id]["CURL_CONNECT_TIME"] = $defaults["connect_time"];
+                $this->promises[$id]["CURL_PRETRANSFER_TIME"] = $defaults["pretransfer_time"];
+                $this->promises[$id]["CURL_STARTTRANSFER_TIME"] = $defaults["starttransfer_time"];
+                $this->promises[$id]["CURL_REDIRECT_COUNT"] = $defaults["redirect_count"];
+                $this->promises[$id]["CURL_REDIRECT_TIME"] = $defaults["redirect_time"];
+                $this->promises[$id]["CURL_SSL_VERIFYRESULT"] = $defaults["ssl_verify_result"];
+                $this->promises[$id]["CURL_CERTINFO"] = $defaults["certinfo"];
+                $this->promises[$id]["CURL_APPCONNECT_TIME"] = curl_getinfo($handle, CURLINFO_APPCONNECT_TIME);
                 $this->promises[$id]["CURL_NUM_CONNECTS"] = curl_getinfo($handle, CURLINFO_NUM_CONNECTS);
                 $this->promises[$id]["CURL_SSL_ENGINES"] = curl_getinfo($handle, CURLINFO_SSL_ENGINES);
-                $this->promises[$id]["CURL_APPCONNECT_TIME"] = curl_getinfo($handle, CURLINFO_APPCONNECT_TIME);
-                $this->promises[$id]["CURL_CERTINFO"] = curl_getinfo($handle, CURLINFO_CERTINFO);
 
                 if (curl_multi_remove_handle($this->mh, $info["handle"]) != CURLM_OK) {
                     // @codeCoverageIgnoreStart
@@ -271,7 +272,7 @@ class Client implements AsyncClientInterface
 
                 if ($info["result"] == CURLE_OK) {
                     /** @var ResponseInterface $response */
-                    $response = $this->promises[$id]["HTTP_RESPONSE"];
+                    $response = $this->promises[$id]["PSR7_RESPONSE"];
 
                     $response->getBody()->rewind();
                     $this->promises[$id]->resolve($response);
