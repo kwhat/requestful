@@ -4,6 +4,6 @@ declare(strict_types=1);
 
 namespace Requestful\Exceptions;
 
-class HttpNetworkException extends HttpClientException
+class NetworkException extends ClientException
 {
 }

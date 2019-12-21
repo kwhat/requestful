@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace Requestful\Http;
 
 use BadMethodCallException;
-use LogicException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UploadedFileInterface;
-use Requestful\Exceptions\HttpNetworkException;
+use Requestful\Exceptions\NetworkException;
 use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
-use Requestful\Exceptions\HttpClientException;
+use Requestful\Exceptions\ClientException;
 
 class Client implements AsyncClientInterface
 {
@@ -52,9 +51,10 @@ class Client implements AsyncClientInterface
     }
 
     /**
+     * @inheritDoc
      * @param RequestInterface $request
      * @return ResponseInterface
-     * @throws HttpClientException
+     * @throws ClientException
      */
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
@@ -65,7 +65,7 @@ class Client implements AsyncClientInterface
             $this->promises[$id] = new Promise(function (PromiseInterface $promise) use ($handle) {
                 if (curl_exec($handle) === false) {
                     // @codeCoverageIgnoreStart
-                    throw new HttpNetworkException(curl_error($handle), curl_errno($handle));
+                    throw new NetworkException(curl_error($handle), curl_errno($handle));
                     // @codeCoverageIgnoreEnd
                 }
 
@@ -79,7 +79,7 @@ class Client implements AsyncClientInterface
 
             $this->close($handle);
             // @codeCoverageIgnoreStart
-        } catch (HttpNetworkException $e) {
+        } catch (NetworkException $e) {
             throw $e;
         }
         // @codeCoverageIgnoreEnd
@@ -88,9 +88,10 @@ class Client implements AsyncClientInterface
     }
 
     /**
+     * @inheritDoc
      * @param RequestInterface $request
      * @return PromiseInterface
-     * @throws HttpNetworkException
+     * @throws NetworkException
      */
     public function sendRequestAsync(RequestInterface $request): PromiseInterface
     {
@@ -107,7 +108,7 @@ class Client implements AsyncClientInterface
         $handle = $this->getCurlHandle($request);
         if (curl_multi_add_handle($this->mh, $handle) != CURLM_OK) {
             // @codeCoverageIgnoreStart
-            throw new HttpNetworkException(curl_error($this->mh), curl_errno($this->mh));
+            throw new NetworkException(curl_error($this->mh), curl_errno($this->mh));
             // @codeCoverageIgnoreEnd
         }
 
@@ -135,7 +136,7 @@ class Client implements AsyncClientInterface
     /**
      * @param RequestInterface $request
      * @return resource|false
-     * @throws HttpNetworkException
+     * @throws NetworkException
      */
     private function getCurlHandle(RequestInterface $request)
     {
@@ -145,7 +146,7 @@ class Client implements AsyncClientInterface
             $handle = curl_init();
             if ($handle === false) {
                 // @codeCoverageIgnoreStart
-                throw new HttpNetworkException("Curl init failure");
+                throw new NetworkException("Curl init failure");
                 // @codeCoverageIgnoreEnd
             }
         }
@@ -239,7 +240,7 @@ class Client implements AsyncClientInterface
 
     /**
      * Ticks the curl multi event loop.
-     * @throws HttpNetworkException
+     * @throws NetworkException
      */
     protected function tick()
     {
@@ -247,12 +248,24 @@ class Client implements AsyncClientInterface
         if ($status == CURLM_OK) {
             $info = curl_multi_info_read($this->mh);
             if ($info !== false) {
-                $id = (int)$info["handle"];
-                $this->promises[$id]["HTTP_TOTAL_TIME"] = curl_getinfo($info["handle"], CURLINFO_TOTAL_TIME);
+                $handle = $info["handle"];
+                $id = (int)$handle;
+
+                $this->promises[$id]["CURL_TOTAL_TIME"] = curl_getinfo($handle, CURLINFO_TOTAL_TIME);
+                $this->promises[$id]["CURL_NAMELOOKUP_TIME"] = curl_getinfo($handle, CURLINFO_NAMELOOKUP_TIME);
+                $this->promises[$id]["CURL_CONNECT_TIME"] = curl_getinfo($handle, CURLINFO_CONNECT_TIME);
+                $this->promises[$id]["CURL_PRETRANSFER_TIME"] = curl_getinfo($handle, CURLINFO_PRETRANSFER_TIME);
+                $this->promises[$id]["CURL_STARTTRANSFER_TIME"] = curl_getinfo($handle, CURLINFO_PRETRANSFER_TIME);
+                $this->promises[$id]["CURL_REDIRECT_COUNT"] = curl_getinfo($handle, CURLINFO_REDIRECT_COUNT);
+                $this->promises[$id]["CURL_REDIRECT_TIME"] = curl_getinfo($handle, CURLINFO_REDIRECT_TIME);
+                $this->promises[$id]["CURL_NUM_CONNECTS"] = curl_getinfo($handle, CURLINFO_NUM_CONNECTS);
+                $this->promises[$id]["CURL_SSL_ENGINES"] = curl_getinfo($handle, CURLINFO_SSL_ENGINES);
+                $this->promises[$id]["CURL_APPCONNECT_TIME"] = curl_getinfo($handle, CURLINFO_APPCONNECT_TIME);
+                $this->promises[$id]["CURL_CERTINFO"] = curl_getinfo($handle, CURLINFO_CERTINFO);
 
                 if (curl_multi_remove_handle($this->mh, $info["handle"]) != CURLM_OK) {
                     // @codeCoverageIgnoreStart
-                    throw new HttpNetworkException(curl_error($this->mh), curl_errno($this->mh));
+                    throw new NetworkException(curl_error($this->mh), curl_errno($this->mh));
                     // @codeCoverageIgnoreEnd
                 }
 
@@ -264,7 +277,7 @@ class Client implements AsyncClientInterface
                     $this->promises[$id]->resolve($response);
                 } else {
                     // @codeCoverageIgnoreStart
-                    throw new HttpNetworkException(curl_error($info["handle"]), $info["result"]);
+                    throw new NetworkException(curl_error($info["handle"]), $info["result"]);
                     // @codeCoverageIgnoreEnd
                 }
 
