@@ -1,0 +1,44 @@
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+  push:
+    branches: [ master ]
+
+jobs:
+  run:
+    runs-on: ${{ matrix.operating-system }}
+    strategy:
+      max-parallel: 3
+      matrix:
+        operating-system: [ubuntu-latest]
+        php-versions: [ '7.2' ]
+    name: PHP ${{ matrix.php-versions }} Test on ${{ matrix.operating-system }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install PHP
+        uses: shivammathur/setup-php@master
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: ast, mbstring, pdo
+          ini-values: 'date.timezone=UTC'
+          coverage: PCOV
+          tools: pecl
+      - name: Check PHP Version
+        run: php -v
+      - name: Check PHP Extensions
+        run: php -m
+      - name: Check Composer Version
+        run: composer -V
+      - name: Install Project Dependencies
+        run: composer install --prefer-dist --optimize-autoloader --no-progress
+      - name: Lint Source
+        run: composer lint
+      - name: Test Source
+        run: composer test
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: coverage-report
+          path: build/coverage/

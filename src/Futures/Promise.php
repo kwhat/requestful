@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Requestful\Futures;
 
 use ArrayAccess;
-use InvalidArgumentException;
+use BadMethodCallException;
 use Iterator;
 use Requestful\Exceptions\PromiseException;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -43,6 +42,8 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @return string
      */
     public function getState(): string
@@ -51,8 +52,11 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @param mixed $value
-     * @throws PromiseException
+     *
+     * @throws RuntimeException
      */
     public function resolve($value)
     {
@@ -60,8 +64,11 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @param mixed $value
-     * @throws PromiseException
+     *
+     * @throws RuntimeException
      */
     public function reject($value)
     {
@@ -69,16 +76,19 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @param string $state
      * @param mixed $value
-     * @throws PromiseException
+     *
+     * @throws RuntimeException
      */
     protected function settle($state, $value)
     {
         if ($this->state == $state && $this->result !== $value) {
-            throw new PromiseException("The promise is already {$state}!");
+            throw new RuntimeException("The promise is already {$state}!");
         } elseif ($this->state != self::PENDING) {
-            throw new PromiseException("Cannot change a {$this->state} promise to {$state}!");
+            throw new RuntimeException("Cannot change a {$this->state} promise to {$state}!");
         }
 
         $this->state = $state;
@@ -86,14 +96,18 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @param callable|null $onFulfilled
      * @param callable|null $onRejected
+     *
      * @return PromiseInterface
+     * @throws BadMethodCallException
      */
     public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface
     {
         if ($onFulfilled == null && $onRejected == null) {
-            throw new InvalidArgumentException("Both arguments to then cannot be null");
+            throw new BadMethodCallException("Both arguments to then cannot be null");
         }
 
         return new static(
@@ -127,24 +141,29 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
+     *
      * @return mixed
      * @throws PromiseException
      */
     public function wait()
     {
         if ($this->state == self::PENDING) {
-            try {
-                if ($this->fnWait == null) {
-                    throw new PromiseException("Cannot wait on a promise that has no wait callback available");
-                }
+            if ($this->fnWait == null) {
+                throw new PromiseException("Cannot wait on a promise that has no wait callback available");
+            }
 
-                call_user_func($this->fnWait, $this);
-                if ($this->state == self::PENDING) {
-                    throw new PromiseException("Wait failed to resolve or reject the promise");
-                }
+            try {
+                ($this->fnWait)($this);
             } catch (Throwable $e) {
                 $this->reject($e);
-                throw new PromiseException($e->getMessage(), $e->getCode(), $e);
+            }
+
+            if ($this->state == self::PENDING) {
+                throw new PromiseException("Wait failed to resolve or reject the promise");
+            } elseif ($this->result instanceof PromiseException) {
+                throw $this->result;
+            } elseif ($this->result instanceof Throwable) {
+                throw new PromiseException($this->result->getMessage(), $this->result->getCode(), $this->result);
             }
         }
 
@@ -152,6 +171,8 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @throws PromiseException
      */
     public function cancel()
@@ -162,7 +183,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
                     throw new PromiseException("Cannot cancel a promise that has no callback available");
                 }
 
-                call_user_func($this->fnCancel, $this);
+                ($this->fnCancel)($this);
                 if ($this->state == self::PENDING) {
                     throw new PromiseException("Promise cancel callback failed to resolve or reject the promise");
                 }
@@ -174,6 +195,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
+     *
      * @param mixed $offset
      * @return bool
      */
@@ -184,6 +206,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
+     *
      * @param mixed $offset
      * @return mixed
      */
@@ -194,6 +217,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
+     *
      * @param mixed $offset
      * @param mixed $value
      */
@@ -204,6 +228,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
+     *
      * @param mixed $offset
      */
     public function offsetUnset($offset)
@@ -212,6 +237,8 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @return mixed
      */
     public function current()
@@ -220,6 +247,8 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @return mixed
      */
     public function next()
@@ -228,6 +257,8 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
     }
 
     /**
+     * @inheritDoc
+     *
      * @return string|float|int|bool|null
      */
     public function key()
@@ -237,6 +268,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
+     *
      * @return bool
      */
     public function valid(): bool
