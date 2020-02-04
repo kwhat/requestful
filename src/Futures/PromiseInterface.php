@@ -1,8 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Requestful\Futures;
+
+use BadMethodCallException;
+use Requestful\Exceptions\PromiseException;
+use RuntimeException;
 
 /**
  * A promise represents the eventual result of an asynchronous operation.
@@ -15,14 +17,16 @@ namespace Requestful\Futures;
  */
 interface PromiseInterface
 {
-    const PENDING = "pending";
-    const FULFILLED = "fulfilled";
-    const REJECTED = "rejected";
+    public const PENDING = "pending";
+    public const FULFILLED = "fulfilled";
+    public const REJECTED = "rejected";
 
     /**
      * Cancels the promise if possible.
      *
      * @link https://github.com/promises-aplus/cancellation-spec/issues/7
+     *
+     * @throws PromiseException
      */
     public function cancel();
 
@@ -40,6 +44,8 @@ interface PromiseInterface
      * Reject the promise with the given reason.
      *
      * @param mixed $value
+     *
+     * @throws RuntimeException
      */
     public function reject($value);
 
@@ -47,6 +53,8 @@ interface PromiseInterface
      * Resolve the promise with the given value.
      *
      * @param mixed $value
+     *
+     * @throws RuntimeException
      */
     public function resolve($value);
 
@@ -58,6 +66,7 @@ interface PromiseInterface
      * @param callable|null $onRejected Invoked when the promise is rejected.
      *
      * @return PromiseInterface
+     * @throws BadMethodCallException
      */
     public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface;
 
@@ -67,6 +76,7 @@ interface PromiseInterface
      * If the promise cannot be waited on, then the promise will be rejected.
      *
      * @return mixed
+     * @throws PromiseException
      */
     public function wait();
 }

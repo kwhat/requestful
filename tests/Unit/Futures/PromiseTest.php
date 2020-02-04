@@ -1,14 +1,14 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Requestful\Test\Unit\Futures;
 
+use BadMethodCallException;
 use InvalidArgumentException;
 use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 class PromiseTest extends TestCase
 {
@@ -67,7 +67,7 @@ class PromiseTest extends TestCase
      */
     public function testWaitWithResolvedException()
     {
-        $this->expectException(PromiseException::class);
+        $this->expectException(RuntimeException::class);
 
         $value = new PromiseException("Test Value");
         $promise = new Promise(
@@ -165,6 +165,9 @@ class PromiseTest extends TestCase
         $this->assertEquals(PromiseInterface::FULFILLED, $promise->getState());
     }
 
+    /**
+     * @throws PromiseException
+     */
     public function testThenCallbackWithException()
     {
         $value = "Test Value";
@@ -182,6 +185,9 @@ class PromiseTest extends TestCase
                 throw new PromiseException($value);
             }
         );
+
+        $this->expectException(PromiseException::class);
+        $this->expectExceptionMessage($value);
 
         $this->assertEquals(PromiseInterface::PENDING, $promise->getState());
         $this->assertInstanceOf(PromiseException::class, $promise->wait());
@@ -235,12 +241,9 @@ class PromiseTest extends TestCase
         $this->assertEquals(PromiseInterface::REJECTED, $promise->getState());
     }
 
-    /**
-     * @throws PromiseException
-     */
     public function testResolveAgainFailure()
     {
-        $this->expectException(PromiseException::class);
+        $this->expectException(RuntimeException::class);
 
         $value = "Test Value";
         $promise = new Promise(
@@ -255,12 +258,9 @@ class PromiseTest extends TestCase
         $promise->resolve("New {$value}");
     }
 
-    /**
-     * @throws PromiseException
-     */
     public function testRejectAgainFailure()
     {
-        $this->expectException(PromiseException::class);
+        $this->expectException(RuntimeException::class);
 
         $value = "Test Value";
         $promise = new Promise(
@@ -277,7 +277,7 @@ class PromiseTest extends TestCase
 
     public function testNoCallbacks()
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(BadMethodCallException::class);
 
         $promise = new Promise();
         $promise->then();

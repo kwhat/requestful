@@ -1,10 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Requestful\Http;
 
 use BadMethodCallException;
+use Exception;
+use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -52,9 +52,11 @@ class Client implements AsyncClientInterface
 
     /**
      * @inheritDoc
+     *
      * @param RequestInterface $request
+     *
      * @return ResponseInterface
-     * @throws ClientException
+     * @throws ClientExceptionInterface
      */
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
@@ -78,8 +80,8 @@ class Client implements AsyncClientInterface
 
             $this->close($handle);
             // @codeCoverageIgnoreStart
-        } catch (NetworkException $e) {
-            throw $e;
+        } catch (Exception $e) {
+            throw new ClientException($e->getMessage(), $e->getCode(), $e);
         }
         // @codeCoverageIgnoreEnd
 
@@ -88,9 +90,11 @@ class Client implements AsyncClientInterface
 
     /**
      * @inheritDoc
+     *
      * @param RequestInterface $request
+     *
      * @return PromiseInterface
-     * @throws NetworkException
+     * @throws ClientExceptionInterface
      */
     public function sendRequestAsync(RequestInterface $request): PromiseInterface
     {
@@ -134,6 +138,7 @@ class Client implements AsyncClientInterface
 
     /**
      * @param RequestInterface $request
+     *
      * @return resource|false
      * @throws NetworkException
      */
@@ -150,9 +155,10 @@ class Client implements AsyncClientInterface
             }
         }
 
-        $headers = $request->getHeaders();
-        foreach ($headers as $key => $value) {
-            $headers[$key] = implode(", ", $value);
+        $headers = array();
+        foreach ($request->getHeaders() as $key => $value) {
+            $line = implode(", ", $value);
+            $headers[] = "{$key}: {$line}";
         }
 
         curl_setopt_array(
@@ -161,7 +167,6 @@ class Client implements AsyncClientInterface
                 CURLOPT_URL => $request->getUri(),
                 CURLOPT_CUSTOMREQUEST => $request->getMethod(),
                 CURLOPT_POSTFIELDS => $this->getCurlPostFields($request),
-                CURLOPT_VERBOSE => true,
                 CURLOPT_HEADER => false,
                 CURLOPT_SAFE_UPLOAD => true,
                 CURLOPT_RETURNTRANSFER => false,
@@ -213,10 +218,10 @@ class Client implements AsyncClientInterface
         $id = (int)$handle;
 
         /** @var ResponseInterface $response */
-        if (($pos = strpos($header, ":")) !== false) {
+        if (preg_match('/^([a-zA-Z0-9\-]+):\s*(.*)\r?\n?$/', trim($header), $matches)) {
             $response = $this->promises[$id]["PSR7_RESPONSE"];
             $this->promises[$id]["PSR7_RESPONSE"] = $response
-                ->withAddedHeader(substr($header, 0, $pos), substr($header, $pos + 1));
+                ->withAddedHeader($matches[1], $matches[2]);
         } elseif (preg_match('/^HTTP\/([0-9.]+)\s+([0-9]{3})\s*(\S*)/i', $header, $matches)) {
             $response = $this->promises[$id]["PSR7_RESPONSE"];
             $this->promises[$id]["PSR7_RESPONSE"] = $response

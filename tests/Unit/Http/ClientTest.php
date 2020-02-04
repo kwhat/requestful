@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Requestful\Http {
 
     use PHPUnit\Framework\TestCase;
@@ -172,6 +170,7 @@ namespace Requestful\Test\Unit\Http {
     use Psr\Http\Message\ServerRequestInterface;
     use Psr\Http\Message\StreamInterface;
     use Psr\Http\Message\UploadedFileInterface;
+    use Requestful\Exceptions\PromiseException;
     use Requestful\Futures\PromiseInterface;
     use Requestful\Http\Client;
     use PHPUnit\Framework\TestCase;
@@ -351,6 +350,10 @@ namespace Requestful\Test\Unit\Http {
             $this->assertNotInstanceOf(PromiseInterface::class, $result);
         }
 
+        /**
+         * @throws ClientExceptionInterface
+         * @throws PromiseException
+         */
         public function testSendRequestAsyncSuccess()
         {
             /** @var MockObject|StreamInterface $body */
@@ -384,6 +387,10 @@ namespace Requestful\Test\Unit\Http {
             $promise->wait();
         }
 
+        /**
+         * @throws ClientExceptionInterface
+         * @throws PromiseException
+         */
         public function testSendRequestAsyncCancel()
         {
             /** @var MockObject|StreamInterface $body */
@@ -417,6 +424,10 @@ namespace Requestful\Test\Unit\Http {
             $promise->cancel();
         }
 
+        /**
+         * @throws ClientExceptionInterface
+         * @throws PromiseException
+         */
         public function testSendServerRequestAsync()
         {
             /** @var MockObject|RequestInterface $request */
@@ -443,6 +454,10 @@ namespace Requestful\Test\Unit\Http {
             $promise->cancel();
         }
 
+        /**
+         * @throws ClientExceptionInterface
+         * @throws PromiseException
+         */
         public function testSendServerRequestAsyncWithFileUploads()
         {
             $stream = $this->createMock(StreamInterface::class);
