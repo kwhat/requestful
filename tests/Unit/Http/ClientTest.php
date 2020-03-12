@@ -18,6 +18,11 @@ namespace Requestful\Http {
         return 2;
     }
 
+    /**
+     * @param resource $ch
+     * @param array<int, mixed> $options
+     * @return bool
+     */
     function curl_setopt_array($ch, array $options)
     {
         TestCase::assertEquals(2, $ch);
@@ -25,12 +30,23 @@ namespace Requestful\Http {
         return true;
     }
 
+    /**
+     * @param resource $ch
+     *
+     * @return bool
+     */
     function curl_exec($ch)
     {
         TestCase::assertEquals(2, $ch);
         return true;
     }
 
+    /**
+     * @param resource $mh
+     * @param resource $ch
+     *
+     * @return int
+     */
     function curl_multi_add_handle($mh, $ch)
     {
         TestCase::assertEquals(1, $mh);
@@ -38,6 +54,11 @@ namespace Requestful\Http {
         return CURLM_OK;
     }
 
+    /**
+     * @param resource $ch
+     * @param int $opt
+     * @return mixed
+     */
     function curl_getinfo($ch, $opt = null)
     {
         TestCase::assertEquals(2, $ch);
@@ -75,6 +96,12 @@ namespace Requestful\Http {
         return array();
     }
 
+    /**
+     * @param resource $mh
+     * @param resource $ch
+     *
+     * @return int
+     */
     function curl_multi_remove_handle($mh, $ch)
     {
         TestCase::assertEquals(1, $mh);
@@ -83,16 +110,28 @@ namespace Requestful\Http {
         return CURLM_OK;
     }
 
+    /**
+     * @param resource $ch
+     */
     function curl_reset($ch)
     {
         TestCase::assertEquals(2, $ch);
     }
 
+    /**
+     * @param resource $ch
+     */
     function curl_close($ch)
     {
         TestCase::assertEquals(2, $ch);
     }
 
+    /**
+     * @param resource $mh
+     * @param float $timeout
+     *
+     * @return int
+     */
     function curl_multi_select($mh, $timeout)
     {
         TestCase::assertEquals(1, $mh);
@@ -129,6 +168,11 @@ namespace Requestful\Http {
         return CURLM_OK;
     }
 
+    /**
+     * @param string $filename
+     * @param string $mimeType
+     * @param string $postname
+     */
     function curl_file_create($filename, $mimeType, $postname)
     {
         TestCase::assertEquals("/test/unit.json", $filename);
@@ -136,6 +180,9 @@ namespace Requestful\Http {
         TestCase::assertEquals("test", $postname);
     }
 
+    /**
+     * @param resource $hm
+     */
     function curl_multi_close($hm)
     {
         TestCase::assertTrue(isset($hm));
@@ -163,6 +210,7 @@ namespace Requestful\Http {
 namespace Requestful\Test\Unit\Http {
 
     use PHPUnit\Framework\MockObject\MockObject;
+    use PHPUnit\Framework\TestCase;
     use Psr\Http\Client\ClientExceptionInterface;
     use Psr\Http\Message\RequestInterface;
     use Psr\Http\Message\ResponseFactoryInterface;
@@ -173,7 +221,6 @@ namespace Requestful\Test\Unit\Http {
     use Requestful\Exceptions\PromiseException;
     use Requestful\Futures\PromiseInterface;
     use Requestful\Http\Client;
-    use PHPUnit\Framework\TestCase;
 
     class ClientTest extends TestCase
     {
@@ -519,11 +566,11 @@ namespace Requestful\Test\Unit\Http {
         {
             $size = static::$subject->getConfig("cache_size");
 
-            static::$subject->setConfig("cache_size", (int)$size / 2);
-            $this->assertEquals((int)$size / 2, static::$subject->getConfig("cache_size"));
+            static::$subject->setConfig("cache_size", $size * 2);
+            $this->assertEquals($size * 2, static::$subject->getConfig("cache_size"));
 
-            static::$subject->setConfig(["cache_size" => (int)$size / 3]);
-            $this->assertEquals((int)$size / 3, static::$subject->getConfig("cache_size"));
+            static::$subject->setConfig(["cache_size" => $size / 2]);
+            $this->assertEquals($size / 2, static::$subject->getConfig("cache_size"));
         }
     }
 }

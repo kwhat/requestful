@@ -42,7 +42,7 @@
     },
     "scripts": {
         "lint": [
-          "phpcs --standard=PSR1,PSR2,PSR12 src/ tests/",
+          "phpcs --standard=PSR1,PSR2,PSR12 --ignore=tests/Unit/Http/ClientTest.php src/ tests/",
           "phan"
         ],
         "test": [
