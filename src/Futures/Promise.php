@@ -172,8 +172,6 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @inheritDoc
-     *
-     * @throws PromiseException
      */
     public function cancel()
     {
@@ -208,6 +206,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
      * @inheritDoc
      *
      * @param mixed $offset
+     *
      * @return mixed
      */
     public function offsetGet($offset)
@@ -286,6 +285,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @param string $name
+     *
      * @return bool
      */
     public function __isset(string $name): bool
@@ -295,6 +295,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
 
     /**
      * @param string $name
+     *
      * @return mixed
      */
     public function __get(string $name)
