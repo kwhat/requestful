@@ -1,3 +1,5 @@
+name: continuous-integration
+
 on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
