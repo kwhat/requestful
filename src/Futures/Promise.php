@@ -197,7 +197,7 @@ class Promise implements ArrayAccess, PromiseInterface, Iterator
      * @param mixed $offset
      * @return bool
      */
-    public function offsetExists($offset)
+    public function offsetExists($offset): bool
     {
         return array_key_exists($offset, $this->properties);
     }

@@ -208,7 +208,7 @@ class Client implements AsyncClientInterface
      *
      * @return int
      */
-    protected function writeHeader($handle, $header)
+    protected function writeHeader($handle, $header): int
     {
         $id = (int)$handle;
 
@@ -233,7 +233,7 @@ class Client implements AsyncClientInterface
      *
      * @return int
      */
-    protected function writeBody($handle, $body)
+    protected function writeBody($handle, $body): int
     {
         $id = (int)$handle;
 
@@ -292,7 +292,7 @@ class Client implements AsyncClientInterface
      *
      * @return bool
      */
-    protected function close($handle)
+    protected function close($handle): bool
     {
         $success = curl_setopt_array(
             $handle,
@@ -351,7 +351,7 @@ class Client implements AsyncClientInterface
     /**
      * @return array<string, mixed>
      */
-    protected function getDefaultConfig()
+    protected function getDefaultConfig(): array
     {
         return array(
             "cache_size" => 15,
