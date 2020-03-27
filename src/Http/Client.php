@@ -12,8 +12,6 @@ use Psr\Http\Message\UploadedFileInterface;
 use Requestful\Futures\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
-use Requestful\Http\ClientException;
-use Requestful\Http\NetworkException;
 
 class Client implements AsyncClientInterface
 {

@@ -3,7 +3,6 @@
 namespace Requestful\Test\Unit\Futures;
 
 use BadMethodCallException;
-use InvalidArgumentException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseException;
 use Requestful\Futures\PromiseInterface;
