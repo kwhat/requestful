@@ -1,6 +1,6 @@
 <?php
 
-namespace Requestful\Exceptions;
+namespace Requestful\Http;
 
 use Exception;
 use Psr\Http\Client\ClientExceptionInterface;

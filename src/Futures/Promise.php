@@ -5,7 +5,6 @@ namespace Requestful\Futures;
 use ArrayAccess;
 use BadMethodCallException;
 use Iterator;
-use Requestful\Exceptions\PromiseException;
 use RuntimeException;
 use Throwable;
 

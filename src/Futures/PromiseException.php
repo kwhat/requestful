@@ -1,6 +1,6 @@
 <?php
 
-namespace Requestful\Exceptions;
+namespace Requestful\Futures;
 
 use Exception;
 

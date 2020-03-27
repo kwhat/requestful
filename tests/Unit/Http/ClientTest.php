@@ -218,7 +218,7 @@ namespace Requestful\Test\Unit\Http {
     use Psr\Http\Message\ServerRequestInterface;
     use Psr\Http\Message\StreamInterface;
     use Psr\Http\Message\UploadedFileInterface;
-    use Requestful\Exceptions\PromiseException;
+    use Requestful\Futures\PromiseException;
     use Requestful\Futures\PromiseInterface;
     use Requestful\Http\Client;
 

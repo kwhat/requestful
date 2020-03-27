@@ -9,11 +9,11 @@ use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\UploadedFileInterface;
-use Requestful\Exceptions\ClientException;
-use Requestful\Exceptions\NetworkException;
-use Requestful\Exceptions\PromiseException;
+use Requestful\Futures\PromiseException;
 use Requestful\Futures\Promise;
 use Requestful\Futures\PromiseInterface;
+use Requestful\Http\ClientException;
+use Requestful\Http\NetworkException;
 
 class Client implements AsyncClientInterface
 {

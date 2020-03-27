@@ -3,7 +3,6 @@
 namespace Requestful\Futures;
 
 use BadMethodCallException;
-use Requestful\Exceptions\PromiseException;
 use RuntimeException;
 
 /**

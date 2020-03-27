@@ -4,8 +4,8 @@ namespace Requestful\Test\Unit\Futures;
 
 use BadMethodCallException;
 use InvalidArgumentException;
-use Requestful\Exceptions\PromiseException;
 use Requestful\Futures\Promise;
+use Requestful\Futures\PromiseException;
 use Requestful\Futures\PromiseInterface;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
